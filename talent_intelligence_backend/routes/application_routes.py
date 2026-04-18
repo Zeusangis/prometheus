@@ -43,9 +43,6 @@ def apply_for_job(job_id):
         )
         db.session.add(new_candidate)
         db.session.commit()
-        # ==========================================
-        # 🚨 THE MISSING LINK: WAKE UP CELERY HERE 🚨
-        # ==========================================
 
         process_resume_task.delay(new_candidate.id)
         # ==========================================

@@ -7,6 +7,7 @@ class DeveloperProfile:
     username: str
     repos_analyzed: int
     total_stars: int
+    total_score: float
     avg_repo_quality: float
     avg_structure_score: float
     repo_type_distribution: dict
@@ -81,9 +82,11 @@ class ProfileAggregator:
         developer_level = self._level_from_score(
             latent_score, repo_type_distribution, uncertainty_indicator
         )
+        total_score = round(latent_score * 100, 2)
         developer_level_explanation = self._explain_level(
             developer_level,
             latent_score,
+            total_score,
             repo_type_distribution,
             personal_ratio,
             meaningful_skills,
@@ -97,6 +100,7 @@ class ProfileAggregator:
             username=username,
             repos_analyzed=len(repositories),
             total_stars=total_stars,
+            total_score=total_score,
             avg_repo_quality=avg_repo_quality,
             avg_structure_score=avg_structure_score,
             repo_type_distribution=repo_type_distribution,
@@ -178,6 +182,7 @@ class ProfileAggregator:
         self,
         level,
         latent_score,
+        total_score,
         repo_type_distribution,
         personal_ratio,
         meaningful_skills,
@@ -213,5 +218,6 @@ class ProfileAggregator:
                 f"uncertainty level: {uncertainty_indicator.get('level', 'low')}",
             ],
             "latent_score": round(latent_score, 4),
+            "total_score": total_score,
             "uncertainty": uncertainty_indicator,
         }
