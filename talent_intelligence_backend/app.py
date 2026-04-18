@@ -1,16 +1,20 @@
-from flask import Flask, jsonify
-import requests
+from flask import Flask
+import os
 
-app = Flask(__name__)
-BASE = "https://api.github.com"
+from routes.github_routes import github_bp
 
 
-@app.route("/repos/<username>")
-def get_repos(username):
-    url = f"{BASE}/users/{username}/repos"
-    res = requests.get(url)
-    return jsonify(res.json())
+def create_app():
+    app = Flask(__name__)
+    app.config["UPLOAD_FOLDER"] = "uploads"
+    app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB
+    app.register_blueprint(github_bp)
+    return app
+
+
+app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    os.makedirs("uploads", exist_ok=True)
+    app.run(debug=True, port=5000)
