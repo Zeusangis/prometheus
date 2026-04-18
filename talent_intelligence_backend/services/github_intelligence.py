@@ -310,22 +310,30 @@ def fetch_github_profile(username):
 def build_compact_github_profile(profile):
     if isinstance(profile, DeveloperProfile):
         return GitHubIntelligenceService().present_compact(profile)
+
+    verified_skills = profile.get("verified_skills", {})
+    sorted_skills = sorted(
+        verified_skills.items(),
+        key=lambda item: item[1].get("score", 0),
+        reverse=True,
+    )
+    developer_profile = profile.get("developer_profile", {})
+
     return {
-        "username": profile["username"],
-        "developer_level": profile["developer_level"],
-        "skills_count": len(profile.get("skills", {})),
+        "username": profile.get("username"),
+        "developer_level": developer_profile.get("level"),
+        "total_score": developer_profile.get("score", 0),
+        "confidence": developer_profile.get("confidence", 0),
+        "skills_count": len(verified_skills),
         "top_skills": [
             {
                 "skill": skill,
-                "confidence": details.get("confidence", 0),
+                "score": details.get("score", 0),
+                "repos": details.get("repos", 0),
                 "evidence": details.get("evidence", []),
             }
-            for skill, details in sorted(
-                profile.get("skills", {}).items(),
-                key=lambda item: item[1].get("confidence", 0),
-                reverse=True,
-            )[:5]
+            for skill, details in sorted_skills[:5]
         ],
-        "repo_type_distribution": profile.get("repo_type_distribution", {}),
-        "uncertainty_indicator": profile.get("uncertainty_indicator", {}),
+        "repo_summary": profile.get("repo_summary", {}),
+        "risk_flags": profile.get("risk_flags", []),
     }

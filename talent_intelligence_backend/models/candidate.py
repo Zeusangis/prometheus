@@ -12,6 +12,7 @@ class Candidate(db.Model):
     job = db.relationship("Job", back_populates="applicants")
     raw_text = db.Column(db.Text, nullable=True)
     # Tracks where the file is in the pipeline
+    ats_score = db.Column(db.Float, nullable=True)  # Score from 0.0 to 100.0
     status = db.Column(db.String(50), default="uploaded")
 
     uploaded_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
