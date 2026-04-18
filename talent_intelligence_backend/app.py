@@ -27,7 +27,6 @@ def create_app():
     Migrate(app, db)
 
     # Initialize Celery
-    celery_init_app(app)
     # Register blueprints
     app.register_blueprint(github_bp)
     app.register_blueprint(application_bp)
@@ -37,6 +36,7 @@ def create_app():
 
 
 app = create_app()
+celery_app = celery_init_app(app)
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
