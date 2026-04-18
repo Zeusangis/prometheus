@@ -9,6 +9,7 @@ class Candidate(db.Model):
     original_filename = db.Column(db.String(255), nullable=False)
     file_path = db.Column(db.String(500), nullable=False, unique=True)
     job_id = db.Column(db.Integer, db.ForeignKey("jobs.id"), nullable=True)
+    job = db.relationship("Job", back_populates="applicants")
 
     # Tracks where the file is in the pipeline
     status = db.Column(db.String(50), default="uploaded")

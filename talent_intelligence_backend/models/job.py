@@ -15,6 +15,7 @@ class Job(db.Model):
     recruiter_data = db.Column(db.JSON, nullable=True)
     status = db.Column(db.String(20), nullable=False, default="open")
     posted_date = db.Column(db.DateTime, nullable=True, default=db.func.now())
+    applicants = db.relationship("Candidate", back_populates="job", lazy=True)
 
     def __repr__(self):
         return f"<Job {self.title} at {self.company}>"

@@ -6,10 +6,8 @@ from werkzeug.utils import secure_filename
 
 from models import Candidate, db
 
-application_bp = Blueprint("resume", __name__)
-create_job = Blueprint("jobs", __name__)
-
 ALLOWED_EXTENSIONS = {"pdf"}
+application_bp = Blueprint("application", __name__)
 
 
 def allowed_file(filename):
@@ -18,31 +16,6 @@ def allowed_file(filename):
 
 @application_bp.route("/api/apply/<int:job_id>", methods=["POST"])
 def apply_for_job(job_id):
-    """
-    Apply for a job by uploading a resume
-    This endpoint accepts a PDF file and associates it with the specified job.
-    ---
-    tags:
-      - Resumes
-    parameters:
-      - name: job_id
-        in: path
-        type: integer
-        required: true
-        description: The ID of the job to apply for.
-      - name: resume
-        in: formData
-        type: file
-        required: true
-        description: The PDF resume file to upload.
-    responses:
-      200:
-        description: Application successful.
-      400:
-        description: Invalid request (missing file, wrong format, or invalid job ID).
-    """
-    # For simplicity, we're not actually checking if the job_id exists here.
-    # In a real application, you'd want to validate that the job exists before accepting applications.
 
     if "resume" not in request.files:
         return jsonify({"error": "No file key 'resume' found in request"}), 400

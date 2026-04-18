@@ -4,6 +4,7 @@ from flask import Flask
 from flask_migrate import Migrate
 from config import Config
 from models import db
+from utils.celery_setup import celery_init_app
 
 from routes.github_routes import github_bp
 from routes.job_routes import jobs_bp
@@ -25,6 +26,8 @@ def create_app():
     db.init_app(app)
     Migrate(app, db)
 
+    # Initialize Celery
+    celery_init_app(app)
     # Register blueprints
     app.register_blueprint(github_bp)
     app.register_blueprint(application_bp)
