@@ -1,276 +1,145 @@
-# Full-Funnel Talent Intelligence System
-
-## Architecture and End-to-End Workflow
+# AI Talent Intelligence System
 
 ## Overview
 
-The Full-Funnel Talent Intelligence System is an agentic, multi-stage hiring pipeline designed to move beyond traditional Applicant Tracking Systems (ATS). Instead of relying on static keyword filtering, the system performs multi-modal claim verification, adaptive interviewing, and AI-driven evaluation while preserving Human-In-The-Loop (HITL) decision control.
+This project is a full-funnel AI-powered talent evaluation system that goes beyond traditional Applicant Tracking Systems (ATS).
 
-The system is built as a stateful workflow, where each stage generates structured outputs that directly inform and improve the next stage.
+Instead of relying on resumes and keyword matching, it builds a multi-stage verification pipeline that evaluates candidates using:
 
-## System Architecture
+- real code evidence
+- AI interviews
+- dynamic skill validation
+- human-in-the-loop decision making
 
-### 1. Core Architectural Layers
+The system ensures that hiring decisions are based on verified ability, not self-reported claims.
 
-#### Input Layer
+## System Architecture (6 Stages)
 
-- Recruiter inputs (Job Description)
-- Candidate inputs (Resume, audio responses)
+### Stage 1: Intelligent Job Description Builder
 
-#### Processing and Intelligence Layer
+- Input: raw job title + requirements
+- Output: structured, bias-reduced job description
+- Removes exclusionary language and organizes skills into required vs optional
 
-- LLM orchestration (Claude API)
-- Resume parsing and structuring
-- External verification APIs (for example, GitHub)
-- Real-time transcription (Whisper API)
-- Adaptive interview engine
+### Stage 2: Resume Screening + GitHub Skill Verification
 
-#### Data Flow Layer (State Management)
+This is the core differentiation layer.
 
-- Structured JSON schema passed across stages
-- Context persistence (skills, gaps, verification flags)
-- Candidate profile continuously enriched
+#### Resume Processing
 
-#### Evaluation and Decision Layer
+- Extracts skills from uploaded resume
+- Matches against job description
 
-- Transcript analysis
-- Skill scoring and competency mapping
-- Bias detection module
-- AI recommendation engine
+#### GitHub Intelligence Module
 
-#### Presentation and Control Layer
+The system analyzes a candidate's public GitHub profile using the GitHub API.
 
-- Unified recruiter dashboard
-- Offer generation engine
-- Human override controls (HITL)
+It:
 
-## End-to-End Workflow (6 Stages)
-
-### Stage 1: Inclusive JD Builder
-
-#### Objective
-
-Transform raw recruiter input into a structured, bias-aware job description.
-
-#### Process
-
-- Recruiter provides role title and requirements
-- LLM processes and restructures content
-
-#### Technology
-
-- Claude API
+- Fetches repositories and languages used
+- Analyzes code distribution across projects
+- Aggregates evidence of technical skills
+- Builds a confidence-based skill profile
 
 #### Output
-
-- Structured Job Description:
-  - Required Skills
-  - Nice-to-Have Skills
-- Bias-scanned, inclusive language
-- Standardized format for downstream processing
-
-### Stage 2: Resume Screening and Modular Claim Verification (Core Differentiator)
-
-#### Objective
-
-Validate candidate claims before advancing to deeper evaluation.
-
-#### Process
-
-1. Resume ingestion and text extraction
-2. Initial keyword filtering (lightweight screening)
-3. Skill mapping against JD
-4. Activation of role-specific verification plugins
-
-#### Technology
-
-- `pdfplumber` (text extraction)
-- Claude API (semantic matching)
-- External APIs (for example, GitHub)
-
-#### Verification Logic
-
-- Cross-check claimed skills against real-world evidence
-- Example:
-  - "Docker" -> check GitHub repositories for usage
-
-#### Output (Standardized JSON Schema)
 
 ```json
 {
-  "matched_skills": [],
-  "missing_skills": [],
-  "claimed_not_found": [],
-  "verification_sources": {}
+  "skills": {
+    "python": {
+      "confidence": 0.85,
+      "evidence": ["api-service", "ml-project"]
+    },
+    "docker": {
+      "confidence": 0.6,
+      "evidence": ["deployment-tool"]
+    }
+  },
+  "developer_level": "intermediate"
 }
 ```
 
-#### Key Innovation
+This ensures that claimed skills are backed by real coding evidence, not just resume text.
 
-- Moves from self-reported skills to evidence-backed skills
-- Flags inconsistencies early in the pipeline
+### Stage 3: Adaptive AI Interview Engine
 
-### Stage 3: Adaptive AI Interview
+- AI conducts live interview using Claude API
+- Questions adapt based on resume + GitHub findings
+- Weak or unverified skills are probed further in real-time
 
-#### Objective
+### Stage 4: Real-Time Transcription System
 
-Dynamically evaluate candidate skills through contextual questioning.
+- Browser-based audio capture
+- WebSocket streaming backend
+- Whisper API for low-latency transcription
 
-#### Process
+### Stage 5: Transcript Analysis + Bias Audit
 
-- Candidate enters live conversational interface
-- AI interviewer accesses Stage 2 outputs
-- Questions adapt in real time based on:
-  - Verified skills
-  - Missing skills
-  - Unverified claims
+- Evaluates candidate responses
+- Scores communication + technical depth
+- Detects interviewer bias in questioning patterns
 
-#### Example Behavior
+### Stage 6: Offer Engine + Human Override (HITL)
 
-- If "Docker" is unverified:
-  - AI asks candidate to explain containerization workflow
+- Generates hiring recommendation
+- Creates offer letter + onboarding plan
+- Recruiter has final override control
 
-#### Technology
+## Key Innovation
 
-- Claude API (streaming responses)
+Unlike traditional hiring systems, this platform replaces assumptions with verified engineering signals.
 
-#### Output
+It combines:
 
-- Context-aware interview dialogue
-- Targeted probing of weak or unverified areas
+- Resume claims
+- Real GitHub code evidence
+- Adaptive AI interviews
+- Structured evaluation scoring
 
-### Stage 4: Real-Time Transcription
+## Tech Stack
 
-#### Objective
+- Python (Flask backend)
+- GitHub API integration
+- Claude API (LLM reasoning layer)
+- Whisper API (speech-to-text)
+- WebSockets (real-time streaming)
+- pdfplumber (resume parsing)
 
-Enable natural, low-latency voice interaction.
+## GitHub Intelligence Module (Core Feature)
 
-#### Process
+This subsystem analyzes a candidate's GitHub activity to infer:
 
-- Audio captured in browser
-- Streamed in chunks to backend
-- Transcribed and returned in real time
+- Programming languages used
+- Skill strength based on real repository usage
+- Engineering maturity level
+- Evidence-backed skill validation
 
-#### Technology
+It transforms raw GitHub data into a structured skill confidence model, forming the foundation of technical verification in the pipeline.
 
-- Browser MediaRecorder API
-- WebSockets
-- FastAPI backend
-- Whisper API
+## Why This Project Matters
 
-#### Output
+Traditional ATS systems:
 
-- Live transcript stream
-- Text synchronized with conversation
+- rely on keywords
+- miss real skill depth
+- are easily gamed
 
-### Stage 5: Transcript Analysis and Bias Auditing
+This system:
 
-#### Objective
+- verifies actual code contributions
+- adapts interviews dynamically
+- reduces hiring bias
+- improves signal quality in recruitment
 
-Generate a structured, fair, and explainable evaluation.
+## Future Enhancements
 
-#### Process
-
-- Combine:
-  - Full interview transcript
-  - Original JD
-  - Verification data (Stage 2)
-- Analyze candidate responses against required competencies
-- Audit AI-generated questions for bias
-
-#### Technology
-
-- Claude API (large context window)
-
-#### Output
-
-- Structured evaluation report:
-  - Competency scores
-  - Strengths and weaknesses
-  - Skill gap analysis
-- Bias audit report:
-  - Flags potential bias patterns
-  - Supports fairness compliance
-
-#### Key Value
-
-- Ensures responsible AI usage
-- Provides transparent reasoning
-
-### Stage 6: Offer Engine and Human Override (HITL)
-
-#### Objective
-
-Deliver actionable hiring decisions with human control.
-
-#### Process
-
-- Aggregate outputs from all prior stages
-- Generate final recommendation
-- Present insights in a unified dashboard
-
-#### Technology
-
-- Claude API (decision and content generation)
-- `html2pdf.js` (offer generation)
-
-#### Dashboard Includes
-
-- AI Match Score
-- Verified vs Unverified Skills
-- Interview Insights
-- Bias Audit Results
-
-#### AI Outputs
-
-- Hire / No-Hire recommendation
-- Personalized onboarding plan
-- Auto-generated offer letter
-
-#### Human-in-the-Loop Control
-
-- Recruiter makes final decision via:
-  - Approve AI recommendation
-  - Override AI decision
-
-## Key System Innovations
-
-### 1. Claim Verification Layer
-
-- Detects discrepancies between resume claims and real-world evidence
-- Reduces false positives in hiring
-
-### 2. Adaptive Interview Engine
-
-- Moves from static to dynamic evaluation
-- Focuses on candidate-specific gaps
-
-### 3. Continuous Context Flow
-
-- Each stage enriches candidate profile
-- Eliminates redundant evaluation
-
-### 4. Bias-Aware AI
-
-- Built-in auditing for fairness
-- Encourages ethical hiring practices
-
-### 5. Human-in-the-Loop Governance
-
-- AI assists, humans decide
-- Maintains accountability and trust
+- Code architecture analysis (AST-based deep review)
+- Continuous skill tracking post-hire
+- Team composition optimization engine
+- Career path recommendation system
 
 ## Summary
 
-This system redefines hiring by shifting from:
+This is not just a hiring tool.
 
-- Keyword filtering to evidence-based validation
-- Static interviews to adaptive evaluation
-- Black-box AI to explainable decision-making
-
-The result is a scalable, fair, and intelligence-driven hiring pipeline that improves recruiter efficiency and candidate quality while keeping humans in control of final decisions.
-
-## Optional Next Deliverables
-
-- Clean architecture diagram (boxes and arrows for slides)
-- Compressed 1-minute pitch script for judges
+It is a multi-stage AI talent intelligence system that verifies, evaluates, and predicts engineering capability using real-world data.
