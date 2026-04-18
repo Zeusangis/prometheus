@@ -5,7 +5,7 @@ from flask_migrate import Migrate
 
 from config import Config
 from models import db
-from routes.create_jobs_routes import jobs_bp
+from talent_intelligence_backend.routes.job_routes import jobs_bp
 from routes.github_routes import github_bp
 from routes.resume_routes import resume_bp
 
