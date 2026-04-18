@@ -23,3 +23,17 @@ class GitHubClient:
             return None, "No usable repositories found."
 
         return repos, None
+
+    def get_repo_readme(self, repo_full_name):
+        headers = {"Accept": "application/vnd.github.raw+json"}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+
+        url = f"https://api.github.com/repos/{repo_full_name}/readme"
+        response = self.session.get(url, headers=headers, timeout=10)
+
+        if response.status_code != 200:
+            return ""
+
+        content = response.text or ""
+        return content[:8000]
