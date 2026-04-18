@@ -15,6 +15,8 @@ def index():
             "success": True,
             "message": "AI Talent Intelligence API",
             "endpoints": [
+                "/api/resume/upload [POST]",
+                "/api/jobs/create [POST]",
                 "/api/github/<username> [GET]",
                 "/api/github/compact/<username> [GET]",
                 "/github/<username> [GET]",

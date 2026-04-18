@@ -77,6 +77,32 @@ GITHUB_LANGUAGE_MAP = {
 }
 
 QUALITY_KEYWORDS = {"api", "backend", "system", "service", "engine"}
+LIBRARY_MARKERS = {
+    "library",
+    "framework",
+    "sdk",
+    "cli",
+    "toolkit",
+    "plugin",
+    "package",
+    "module",
+    "runtime",
+    "lib",
+}
+EDUCATIONAL_MARKERS = {
+    "freecodecamp",
+    "course",
+    "curriculum",
+    "lesson",
+    "lecture",
+    "workshop",
+    "homework",
+    "assignment",
+    "exercise",
+    "solutions",
+    "labs",
+    "bootcamp",
+}
 TUTORIAL_MARKERS = {
     "100 days of code",
     "100-days-of-code",
@@ -89,6 +115,14 @@ TUTORIAL_MARKERS = {
     "boilerplate",
     "practice",
     "leetcode",
+}
+REPO_TYPE_WEIGHTS = {
+    "personal_project": 1.0,
+    "library_or_framework": 0.7,
+    "unknown": 0.3,
+    "organization_repo": 0.2,
+    "tutorial_or_clone": 0.1,
+    "educational_content": 0.0,
 }
 STRUCTURE_MARKERS = {
     "src",
