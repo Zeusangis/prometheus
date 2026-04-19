@@ -1,4 +1,4 @@
-# Prometheus
+# TrueHire
 
 AI-powered technical recruiting — screen candidates smarter, not harder.
 
@@ -8,13 +8,13 @@ Technical recruiting is broken. Recruiters can't evaluate code, so they rely on 
 
 ## Solution
 
-Prometheus gives recruiters an AI-powered pipeline that automatically verifies a candidate's technical ability before any human time is spent. It scrapes their GitHub profile, analyses their actual code against the job requirements, and then conducts an AI interview that digs into their real understanding of their own work.
+TrueHire gives recruiters an AI-powered pipeline that automatically verifies a candidate's technical ability before any human time is spent. It scrapes their GitHub profile, analyses their actual code against the job requirements, and then conducts an AI interview that digs into their real understanding of their own work.
 
 ## How it works
 
 1. Recruiter creates a job posting and configures what to look for — languages, code quality metrics, interview tone, and custom questions
 2. Candidate receives a link (via LinkedIn, email, etc.) and fills out a simple application form with their resume and GitHub username
-3. Prometheus scrapes their GitHub and scores them across metrics like language match, code quality, security practices, and test coverage
+3. TrueHire scrapes their GitHub and scores them across metrics like language match, code quality, security practices, and test coverage
 4. The AI interviewer conducts a personalised interview based on their actual GitHub projects, asking them to explain their own code and decisions
 5. Recruiter sees a full dashboard with scores, GitHub analysis, and the complete interview transcript for every candidate
 
@@ -42,6 +42,7 @@ Prometheus gives recruiters an AI-powered pipeline that automatically verifies a
 ## Running locally
 
 ### Frontend
+
 ```bash
 cd client
 npm install
@@ -49,6 +50,7 @@ npm run dev
 ```
 
 ### Backend
+
 ```bash
 cd server
 pip install -r requirements.txt
@@ -56,4 +58,5 @@ python app.py
 ```
 
 ### Environment variables
+
 Create a `.env` file inside the `client/` folder:
