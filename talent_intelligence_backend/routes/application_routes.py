@@ -41,15 +41,34 @@ def apply_for_job(job_id):
         return (
             jsonify(
                 {
-                    "message": "Application endpoint is available. Submit a POST multipart/form-data request with a 'resume' PDF file.",
+                    "message": "Application endpoint is available. Submit a POST multipart/form-data request with full_name, email, github_username, and a 'resume' PDF file.",
                     "jobId": job_id,
                     "jobTitle": job.title,
                     "method": "POST",
                     "contentType": "multipart/form-data",
-                    "requiredField": "resume",
+                    "requiredFields": [
+                        "full_name",
+                        "email",
+                        "github_username",
+                        "resume",
+                    ],
                 }
             ),
             200,
+        )
+
+    full_name = (request.form.get("full_name") or "").strip()
+    email = (request.form.get("email") or "").strip()
+    github_username = (request.form.get("github_username") or "").strip()
+
+    if not full_name or not email or not github_username:
+        return (
+            jsonify(
+                {
+                    "error": "full_name, email, and github_username are required in form-data"
+                }
+            ),
+            400,
         )
 
     if "resume" not in request.files:
@@ -69,6 +88,9 @@ def apply_for_job(job_id):
         file.save(save_path)
 
         new_candidate = Candidate(
+            full_name=full_name,
+            email=email,
+            github_username=github_username,
             original_filename=file.filename,
             file_path=save_path,
             status="applied",

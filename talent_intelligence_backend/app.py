@@ -1,6 +1,7 @@
 import os
 
 from flask import Flask
+from flask_cors import CORS
 from flask_migrate import Migrate
 from config import Config
 from models import db
@@ -14,6 +15,9 @@ from routes.application_routes import application_bp
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    # Enable CORS for local frontend clients and browser extension contexts.
+    CORS(app, resources={r"/api/*": {"origins": "*"}})
 
     # It's usually better to put these inside your config.py,
     # but defining them here works perfectly fine for now!
