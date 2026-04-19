@@ -56,9 +56,6 @@ export default function InterviewSummaryPage() {
                   <h1 className="mt-2 text-3xl font-semibold leading-tight text-foreground">
                     Interview Summary
                   </h1>
-                  <p className="mt-2 text-sm text-[#425349]">
-                    Candidate ID: {candidateId}
-                  </p>
                 </div>
 
                 <Link

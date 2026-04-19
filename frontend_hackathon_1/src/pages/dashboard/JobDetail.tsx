@@ -7,6 +7,7 @@ import {
   getJobApplicants,
   getJobById,
   moveCandidateToNextStep,
+  normalizeJobId,
   type JobApplicant,
 } from "../../api/jobs";
 
@@ -55,6 +56,15 @@ export default function JobDetail() {
   const { jobId } = useParams({ from: "/dashboard/$jobId" });
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmMoveTarget, setConfirmMoveTarget] = useState<{
+    candidateId: number;
+    candidateName: string;
+    nextStatus: string;
+  } | null>(null);
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState<"idle" | "copied" | "error">(
+    "idle",
+  );
   const {
     data: job,
     isLoading,
@@ -105,11 +115,24 @@ export default function JobDetail() {
       return;
     }
 
-    setActionError(null);
-    moveStageMutation.mutate({
+    setConfirmMoveTarget({
       candidateId: applicant.id,
+      candidateName: applicant.full_name,
       nextStatus,
     });
+  };
+
+  const confirmMoveToNextStage = () => {
+    if (!confirmMoveTarget) {
+      return;
+    }
+
+    setActionError(null);
+    moveStageMutation.mutate({
+      candidateId: confirmMoveTarget.candidateId,
+      nextStatus: confirmMoveTarget.nextStatus,
+    });
+    setConfirmMoveTarget(null);
   };
 
   const statusLabel =
@@ -129,6 +152,20 @@ export default function JobDetail() {
       year: "numeric",
     }).format(parsed);
   })();
+
+  const applicationLink =
+    typeof window === "undefined"
+      ? ""
+      : `${window.location.origin}/apply/${normalizeJobId(jobId)}`;
+
+  const handleCopyApplicationLink = async () => {
+    try {
+      await navigator.clipboard.writeText(applicationLink);
+      setCopyFeedback("copied");
+    } catch {
+      setCopyFeedback("error");
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -207,7 +244,13 @@ export default function JobDetail() {
                 <button className="rounded-2xl border border-border bg-card px-5 py-3 text-sm font-semibold text-primary hover:border-primary">
                   Edit Job Description
                 </button>
-                <button className="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary-light">
+                <button
+                  onClick={() => {
+                    setCopyFeedback("idle");
+                    setIsShareDialogOpen(true);
+                  }}
+                  className="rounded-2xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary-light"
+                >
                   Share Job Link
                 </button>
               </div>
@@ -394,6 +437,99 @@ export default function JobDetail() {
           </div>
         </main>
       </div>
+
+      {confirmMoveTarget ? (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-primary-dark/30 px-4">
+          <div className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+              Confirm Stage Update
+            </p>
+            <h3 className="mt-2 text-2xl font-semibold text-foreground">
+              Move Candidate Forward?
+            </h3>
+            <p className="mt-3 text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">
+                {confirmMoveTarget.candidateName}
+              </span>{" "}
+              will be moved to{" "}
+              <span className="font-semibold text-foreground">
+                {toStatusLabel(confirmMoveTarget.nextStatus)}
+              </span>
+              .
+            </p>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setConfirmMoveTarget(null)}
+                disabled={moveStageMutation.isPending}
+                className="rounded-2xl border border-border bg-card px-4 py-2 text-sm font-semibold text-muted-foreground hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmMoveToNextStage}
+                disabled={moveStageMutation.isPending}
+                className="rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary-light disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {moveStageMutation.isPending ? "Moving..." : "Yes, Move"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isShareDialogOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-primary-dark/30 px-4"
+          onClick={() => setIsShareDialogOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg rounded-3xl border border-border bg-card p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+              Share Application Form
+            </p>
+            <h3 className="mt-2 text-2xl font-semibold text-foreground">
+              Copy Public Form Link
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Send this link to candidates so they can apply directly.
+            </p>
+
+            <div className="mt-5 rounded-2xl border border-border bg-background px-4 py-3">
+              <p className="truncate text-sm font-medium text-foreground">
+                {applicationLink}
+              </p>
+            </div>
+
+            {copyFeedback === "copied" ? (
+              <p className="mt-3 text-sm font-semibold text-primary">
+                Link copied to clipboard.
+              </p>
+            ) : copyFeedback === "error" ? (
+              <p className="mt-3 text-sm font-semibold text-[#9a3530]">
+                Could not copy automatically. Please copy the link manually.
+              </p>
+            ) : null}
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setIsShareDialogOpen(false)}
+                className="rounded-2xl border border-border bg-card px-4 py-2 text-sm font-semibold text-muted-foreground hover:border-primary hover:text-primary"
+              >
+                Close
+              </button>
+              <button
+                onClick={handleCopyApplicationLink}
+                className="rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary-light"
+              >
+                Copy Link
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -127,6 +127,8 @@ def apply_for_job(job_id):
 @application_bp.route("/api/candidates/<int:candidate_id>/next-step", methods=["POST"])
 def move_to_next_step(candidate_id, job_id=None):
     payload = request.get_json(silent=True) or {}
+    payload_job_id = _parse_job_id(payload.get("job_id") or payload.get("jobId"))
+    effective_job_id = job_id if job_id is not None else payload_job_id
     next_status = payload.get("next_status") or payload.get("status")
     if not next_status:
         return jsonify({"error": "next_status is required"}), 400
@@ -144,7 +146,7 @@ def move_to_next_step(candidate_id, job_id=None):
     if not candidate:
         return jsonify({"error": "Candidate not found"}), 404
 
-    if job_id is not None and candidate.job_id != job_id:
+    if effective_job_id is not None and candidate.job_id != effective_job_id:
         return (
             jsonify({"error": "Candidate does not belong to the provided job"}),
             400,
@@ -154,7 +156,11 @@ def move_to_next_step(candidate_id, job_id=None):
     if next_status == "interview_scheduled":
         candidate.meeting_id = create_meeting_id
         db.session.add(
-            MeetingSummary(candidate_id=candidate.id, meeting_id=create_meeting_id)
+            MeetingSummary(
+                candidate_id=candidate.id,
+                job_id=candidate.job_id,
+                meeting_id=create_meeting_id,
+            )
         )
     candidate.status = next_status
 

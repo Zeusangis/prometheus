@@ -21,12 +21,23 @@ type JobDetailPayload = {
   error?: string;
 };
 
+type ApplyApiResponse = {
+  success?: boolean;
+  message?: string;
+  error?: string;
+};
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
   "http://127.0.0.1:5000";
 
+function normalizeJobId(rawJobId: string) {
+  return rawJobId.startsWith("job_") ? rawJobId.slice(4) : rawJobId;
+}
+
 export async function getJobInfo(jobId: string): Promise<JobInfo> {
-  const response = await fetch(`${API_BASE_URL}/api/jobs/${jobId}`);
+  const normalizedJobId = normalizeJobId(jobId);
+  const response = await fetch(`${API_BASE_URL}/api/jobs/${normalizedJobId}`);
   const payload = (await response.json().catch(() => ({}))) as JobDetailPayload;
 
   if (!response.ok) {
@@ -45,25 +56,23 @@ export async function submitApplication(
   jobId: string,
   formData: FormData,
 ): Promise<ApplyResponse> {
-  const payloadForLog: Record<string, unknown> = { jobId };
+  const normalizedJobId = normalizeJobId(jobId);
+  const response = await fetch(
+    `${API_BASE_URL}/api/jobs/${normalizedJobId}/apply`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
 
-  for (const [key, value] of formData.entries()) {
-    if (value instanceof File) {
-      payloadForLog[key] = {
-        name: value.name,
-        type: value.type,
-        size: value.size,
-      };
-      continue;
-    }
+  const payload = (await response.json().catch(() => ({}))) as ApplyApiResponse;
 
-    payloadForLog[key] = value;
+  if (!response.ok) {
+    throw new Error(payload.error || "Failed to submit application");
   }
 
-  console.log("[Apply] Submission captured (local mode):", payloadForLog);
-
   return {
-    success: true,
-    message: "Logged locally",
+    success: payload.success ?? true,
+    message: payload.message,
   };
 }

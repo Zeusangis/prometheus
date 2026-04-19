@@ -128,9 +128,6 @@ export default function ProfilePage() {
                       <span className="rounded-full bg-[#daf2e2] px-2 py-1 text-[#246747]">
                         Verification Complete
                       </span>
-                      <span className="rounded-full bg-[#e7ece9] px-2 py-1 text-[#4f5f56]">
-                        Candidate: {candidateId}
-                      </span>
                     </div>
                   </div>
                 </div>

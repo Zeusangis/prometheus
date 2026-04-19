@@ -121,7 +121,10 @@ export async function moveCandidateToNextStep(params: {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ next_status: params.nextStatus }),
+      body: JSON.stringify({
+        next_status: params.nextStatus,
+        job_id: parsedJobId,
+      }),
     },
   );
 
