@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import type { CompanyJob } from "../api/jobs";
+import { normalizeJobId, type CompanyJob } from "../api/jobs";
 
 type JobsListProps = {
   jobs: CompanyJob[];
@@ -40,7 +40,7 @@ export function JobsList({ jobs }: JobsListProps) {
                 <td className="px-6 py-5">
                   <Link
                     to="/dashboard/$jobId"
-                    params={{ jobId: job.id }}
+                    params={{ jobId: normalizeJobId(job.id) }}
                     className="group block"
                   >
                     <p className="text-base font-semibold text-[#1d2c24] group-hover:text-[#0f6c45]">
@@ -66,15 +66,15 @@ export function JobsList({ jobs }: JobsListProps) {
                   </span>
                 </td>
                 <td className="px-6 py-5 text-2xl font-semibold text-[#0f6c45]">
-                  {job.total_applicants || "--"}
+                  {job.total_applicants ?? "--"}
                 </td>
                 <td className="px-6 py-5 text-2xl font-semibold text-[#0f6c45]">
-                  --
+                  {"--"}
                 </td>
                 <td className="px-6 py-5 text-right">
                   <Link
                     to="/dashboard/$jobId"
-                    params={{ jobId: job.id }}
+                    params={{ jobId: normalizeJobId(job.id) }}
                     className="inline-flex rounded-xl bg-[#0f6c45] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#0c5c3a]"
                   >
                     Manage

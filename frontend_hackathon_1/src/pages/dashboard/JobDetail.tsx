@@ -1,6 +1,8 @@
 import { Link, useParams } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "../../components/Sidebar";
 import { Header } from "../../components/Header";
+import { getJobApplicants, getJobById } from "../../api/jobs";
 
 const pipelineStats = [
   { label: "Sourcing", value: 124, progress: 78 },
@@ -10,41 +12,51 @@ const pipelineStats = [
   { label: "Offer", value: 2, progress: 10, highlighted: true },
 ];
 
-const applicants = [
-  {
-    id: "jane-sutherland",
-    name: "Jane Sutherland",
-    role: "Senior UI/UX Designer at EcoCorp",
-    match: 98,
-    stage: "Verification",
-    avatar:
-      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=96&h=96&fit=crop&crop=face",
-    moveDisabled: false,
-  },
-  {
-    id: "marcus-rivers",
-    name: "Marcus Rivers",
-    role: "Product Designer at Bloom Metrics",
-    match: 84,
-    stage: "Screening",
-    avatar:
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=96&h=96&fit=crop&crop=face",
-    moveDisabled: false,
-  },
-  {
-    id: "lila-aris",
-    name: "Lila Aris",
-    role: "Mid-Weight Designer at Studio Leaf",
-    match: 62,
-    stage: "Sourcing",
-    avatar:
-      "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=96&h=96&fit=crop&crop=face",
-    moveDisabled: true,
-  },
-];
+const statusBadgeClassMap: Record<string, string> = {
+  queued: "bg-secondary text-primary-dark",
+  screening: "bg-primary-lighter/35 text-primary-dark",
+  shortlisted: "bg-[#daf2e2] text-[#246747]",
+  rejected: "bg-[#ffe3e0] text-[#9a3530]",
+};
 
 export default function JobDetail() {
   const { jobId } = useParams({ from: "/dashboard/$jobId" });
+  const {
+    data: job,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ["job-detail", jobId],
+    queryFn: () => getJobById(jobId),
+    enabled: !!jobId,
+  });
+  const {
+    data: applicants,
+    isLoading: isApplicantsLoading,
+    error: applicantsError,
+  } = useQuery({
+    queryKey: ["job-applicants", jobId],
+    queryFn: () => getJobApplicants(jobId),
+    enabled: !!jobId,
+  });
+
+  const statusLabel =
+    job?.status === "open"
+      ? "Active"
+      : job?.status === "closed"
+        ? "Closed"
+        : "Draft";
+
+  const postedDateLabel = (() => {
+    if (!job?.posted_date) return "-";
+    const parsed = new Date(job.posted_date);
+    if (Number.isNaN(parsed.getTime())) return "-";
+    return new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(parsed);
+  })();
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -65,20 +77,58 @@ export default function JobDetail() {
 
             <section className="mt-6 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <div className="flex items-center gap-3 text-sm">
-                  <span className="rounded-full bg-primary-lighter/35 px-3 py-1 text-xs font-semibold text-primary-dark">
-                    Active
-                  </span>
-                  <span className="text-muted-foreground">• Remote</span>
-                </div>
+                {isLoading ? (
+                  <p className="text-sm text-muted-foreground">
+                    Loading job details...
+                  </p>
+                ) : error ? (
+                  <p className="text-sm text-red-600">
+                    Failed to load job details. Please verify backend is
+                    running.
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="rounded-full bg-primary-lighter/35 px-3 py-1 text-xs font-semibold text-primary-dark">
+                        {statusLabel}
+                      </span>
+                      <span className="text-muted-foreground">
+                        • {job?.location || job?.jobType || "Remote"}
+                      </span>
+                    </div>
 
-                <h1 className="mt-2 text-4xl leading-tight font-semibold text-foreground">
-                  Senior Product Designer
-                </h1>
+                    <h1 className="mt-2 text-4xl leading-tight font-semibold text-foreground">
+                      {job?.title}
+                    </h1>
 
-                <p className="mt-3 text-muted-foreground">
-                  Posted 12 days ago • Hiring Team: Design Ops • Job ID: {jobId}
-                </p>
+                    <p className="mt-3 text-muted-foreground">
+                      Posted: {postedDateLabel} • Company: {job?.company || "-"}
+                    </p>
+                    {job?.description && (
+                      <p className="mt-3 max-w-3xl text-sm text-muted-foreground">
+                        {job.description}
+                      </p>
+                    )}
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {(job?.languages || []).map((language) => (
+                        <span
+                          key={language}
+                          className="rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-primary-dark"
+                        >
+                          {language}
+                        </span>
+                      ))}
+                      {(job?.frameworks || []).map((framework) => (
+                        <span
+                          key={framework}
+                          className="rounded-full bg-primary-lighter/35 px-3 py-1 text-xs font-semibold text-primary-dark"
+                        >
+                          {framework}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="flex flex-wrap gap-3">
@@ -148,73 +198,110 @@ export default function JobDetail() {
               </div>
 
               <div className="space-y-3">
-                {applicants.map((applicant) => (
-                  <article
-                    key={applicant.id}
-                    className="flex flex-col gap-4 rounded-3xl border border-border bg-card px-4 py-4 md:flex-row md:items-center"
-                  >
-                    <div className="flex min-w-0 flex-1 items-center gap-4">
-                      <img
-                        src={applicant.avatar}
-                        alt={applicant.name}
-                        className="h-12 w-12 rounded-full object-cover"
-                      />
-                      <div className="min-w-0">
-                        <p className="truncate text-lg font-semibold text-foreground">
-                          {applicant.name}
-                        </p>
-                        <p className="truncate text-sm text-muted-foreground">
-                          {applicant.role}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="w-full md:w-40">
-                      <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
-                        AI Match
-                      </p>
-                      <div className="mt-1 h-1.5 w-full rounded-full bg-secondary">
-                        <div
-                          className="h-1.5 rounded-full bg-primary"
-                          style={{ width: `${applicant.match}%` }}
-                        />
-                      </div>
-                      <p className="mt-1 text-sm font-semibold text-primary">
-                        {applicant.match}%
-                      </p>
-                    </div>
-
-                    <div className="w-full md:w-36">
-                      <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
-                        Current Stage
-                      </p>
-                      <span className="mt-1 inline-flex rounded-full bg-secondary px-3 py-1 text-xs font-semibold text-primary-dark">
-                        {applicant.stage}
-                      </span>
-                    </div>
-
-                    <Link
-                      to="/profile/$candidateId"
-                      params={{ candidateId: applicant.id }}
-                      className="rounded-2xl px-4 py-2 text-sm font-semibold text-primary hover:text-primary-light"
-                    >
-                      View Profile
-                    </Link>
-
-                    <button
-                      disabled={applicant.moveDisabled}
-                      className="rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary-light disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
-                    >
-                      Move to Next Stage
-                    </button>
+                {isApplicantsLoading ? (
+                  <article className="rounded-3xl border border-border bg-card px-4 py-5 text-sm text-muted-foreground">
+                    Loading applicants...
                   </article>
-                ))}
-              </div>
+                ) : applicantsError ? (
+                  <article className="rounded-3xl border border-[#ffe3e0] bg-[#fff6f5] px-4 py-5 text-sm text-[#9a3530]">
+                    Failed to load applicants. Please verify backend is running.
+                  </article>
+                ) : (applicants?.length ?? 0) === 0 ? (
+                  <article className="rounded-3xl border border-border bg-card px-4 py-5 text-sm text-muted-foreground">
+                    No applicants yet.
+                  </article>
+                ) : (
+                  applicants?.map((applicant) => {
+                    const uploadedDateLabel = (() => {
+                      const parsed = new Date(applicant.uploaded_at);
+                      if (Number.isNaN(parsed.getTime())) return "-";
+                      return new Intl.DateTimeFormat("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      }).format(parsed);
+                    })();
+                    const normalizedStatus = applicant.status.toLowerCase();
+                    const statusClass =
+                      statusBadgeClassMap[normalizedStatus] ||
+                      "bg-secondary text-primary-dark";
 
-              <div className="mt-8 flex justify-center">
-                <button className="rounded-full border border-border bg-card px-8 py-3 font-medium text-foreground hover:border-primary">
-                  Load 24 more applicants
-                </button>
+                    return (
+                      <article
+                        key={applicant.id}
+                        className="flex flex-col gap-4 rounded-3xl border border-border bg-card px-4 py-4 md:flex-row md:items-center"
+                      >
+                        <div className="flex min-w-0 flex-1 items-center gap-4">
+                          <div className="grid h-12 w-12 place-items-center rounded-full bg-secondary text-sm font-semibold uppercase text-primary-dark">
+                            {applicant.full_name
+                              .split(" ")
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((part) => part[0])
+                              .join("") || "NA"}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate text-lg font-semibold text-foreground">
+                              {applicant.full_name}
+                            </p>
+                            <p className="truncate text-sm text-muted-foreground">
+                              {applicant.email}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {applicant.github_username
+                                ? `GitHub: @${applicant.github_username}`
+                                : "GitHub: not provided"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="w-full md:w-44">
+                          <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
+                            Resume
+                          </p>
+                          <p className="mt-1 truncate text-sm font-semibold text-foreground">
+                            {applicant.filename || "No file"}
+                          </p>
+                        </div>
+
+                        <div className="w-full md:w-40">
+                          <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
+                            Uploaded
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-primary">
+                            {uploadedDateLabel}
+                          </p>
+                        </div>
+
+                        <div className="w-full md:w-36">
+                          <p className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground">
+                            Status
+                          </p>
+                          <span
+                            className={`mt-1 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}
+                          >
+                            {applicant.status}
+                          </span>
+                        </div>
+
+                        <Link
+                          to="/profile/$candidateId"
+                          params={{ candidateId: String(applicant.id) }}
+                          className="rounded-2xl px-4 py-2 text-sm font-semibold text-primary hover:text-primary-light"
+                        >
+                          View Profile
+                        </Link>
+
+                        <button
+                          disabled={normalizedStatus !== "queued"}
+                          className="rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary-light disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
+                        >
+                          Move to Next Stage
+                        </button>
+                      </article>
+                    );
+                  })
+                )}
               </div>
             </section>
           </div>

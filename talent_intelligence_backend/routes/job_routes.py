@@ -231,6 +231,33 @@ def get_my_company_jobs():
     )
 
 
+@jobs_bp.route("/api/jobs/<job_id>", methods=["PATCH", "PUT", "POST"])
+@jobs_bp.route("/api/jobs/<job_id>/update", methods=["PATCH", "PUT", "POST"])
+def update_job(job_id):
+    parsed_job_id = _parse_job_id(job_id)
+    if parsed_job_id is None:
+        return jsonify({"error": "Invalid job id"}), 400
+
+    job = Job.query.get(parsed_job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    if "status" in data and data.get("status") not in STATUS_OPTIONS:
+        return (
+            jsonify({"error": "Invalid status. Must be one of: open, closed, draft"}),
+            400,
+        )
+
+    try:
+        job.update_from_frontend_payload(data)
+        db.session.commit()
+        return jsonify({"success": True, "job": job.to_dict()}), 200
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"error": f"Failed to update job: {exc}"}), 500
+
+
 @jobs_bp.route("/api/jobs/<job_id>/applicants", methods=["GET"])
 def get_job_applicants(job_id):
     parsed_job_id = _parse_job_id(job_id)

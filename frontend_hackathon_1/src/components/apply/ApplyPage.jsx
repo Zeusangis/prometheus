@@ -1,25 +1,39 @@
 // src/pages/apply/ApplyPage.jsx
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams } from "@tanstack/react-router";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { submitApplication, getJobInfo } from "../../api/apply";
+import { useMutation } from "@tanstack/react-query";
+import { submitApplication } from "../../api/apply";
 
 export default function ApplyPage() {
   const { jobId } = useParams({ strict: false });
   const [submitted, setSubmitted] = useState(false);
-  const [interviewLink, setInterviewLink] = useState("");
+  const [dragActive, setDragActive] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const fileInputRef = useRef(null);
   const [resumeFile, setResumeFile] = useState(null);
   const [form, setForm] = useState({
-    name: "",
+    fullName: "",
     email: "",
-    github: "",
+    githubUsername: "",
   });
 
-  const { data: job, isLoading: jobLoading } = useQuery({
-    queryKey: ["job-info", jobId],
-    queryFn: () => getJobInfo(jobId),
-    enabled: !!jobId,
-  });
+  const updateResumeFile = (file) => {
+    if (!file) return;
+    const isPdf = file.type === "application/pdf" || file.name.endsWith(".pdf");
+    if (!isPdf) {
+      setErrorMessage("Please upload a PDF file only.");
+      return;
+    }
+
+    const maxSizeBytes = 5 * 1024 * 1024;
+    if (file.size > maxSizeBytes) {
+      setErrorMessage("Maximum file size is 5MB.");
+      return;
+    }
+
+    setErrorMessage("");
+    setResumeFile(file);
+  };
 
   const {
     mutate: apply,
@@ -28,15 +42,20 @@ export default function ApplyPage() {
   } = useMutation({
     mutationFn: () => {
       const formData = new FormData();
-      formData.append("name", form.name);
+      formData.append("full_name", form.fullName);
       formData.append("email", form.email);
-      formData.append("github", form.github);
+      formData.append("github_username", form.githubUsername);
       formData.append("jobId", jobId);
-      if (resumeFile) formData.append("resume", resumeFile);
+
+      // Keep both keys for broader backend compatibility.
+      if (resumeFile) {
+        formData.append("resume", resumeFile);
+        formData.append("file", resumeFile);
+      }
+
       return submitApplication(jobId, formData);
     },
-    onSuccess: (data) => {
-      setInterviewLink(data.interviewLink);
+    onSuccess: () => {
       setSubmitted(true);
     },
   });
@@ -44,37 +63,53 @@ export default function ApplyPage() {
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
 
   const handleSubmit = () => {
-    if (!form.name || !form.email || !form.github || !resumeFile) return;
+    if (!form.fullName || !form.email || !form.githubUsername || !resumeFile) {
+      setErrorMessage("Please complete all fields before submitting.");
+      return;
+    }
+
+    setErrorMessage("");
     apply();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    updateResumeFile(file);
   };
 
   // Success screen
   if (submitted) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="bg-white border border-gray-100 rounded-2xl p-8 max-w-md w-full text-center">
-          <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path
-                d="M4 10L8 14L16 6"
-                stroke="#15803d"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
+      <div className="min-h-screen bg-[#f3f4f4]">
+        <header className="h-14 border-b border-[#e4e6e6] bg-white/90 backdrop-blur">
+          <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between px-5">
+            <div className="text-[31px] font-semibold tracking-[-0.02em] text-[#11543b]">
+              HireFlow
+            </div>
           </div>
-          <h1 className="text-lg font-semibold text-gray-900">
-            Application submitted!
-          </h1>
-          <p className="text-sm text-gray-400 mt-2 leading-relaxed">
-            Thanks for applying. We'll review your profile and send you an
-            interview link shortly.
-          </p>
-          <div className="mt-6 p-3 bg-gray-50 rounded-xl border border-gray-100">
-            <p className="text-xs text-gray-400 mb-1">Your interview link</p>
-            <p className="text-xs text-gray-600 font-mono break-all">
-              {interviewLink}
+        </header>
+
+        <div className="flex min-h-[calc(100vh-56px)] items-center justify-center px-4 py-10">
+          <div className="w-full max-w-xl rounded-[22px] border border-[#e4e6e6] bg-white p-8 text-center shadow-[0_8px_35px_rgba(14,48,34,0.08)]">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[#d6efe1]">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path
+                  d="M4 10L8 14L16 6"
+                  stroke="#0f6c45"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-semibold text-[#1f2b24]">
+              Application Submitted
+            </h1>
+            <p className="mt-2 text-sm text-[#57655e]">
+              Thanks for applying. Your application has been received and next
+              steps will be shared through email.
             </p>
           </div>
         </div>
@@ -83,135 +118,202 @@ export default function ApplyPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-lg mx-auto px-4 py-10">
-        {/* Job header */}
-        <div className="mb-8">
-          {jobLoading ? (
-            <div className="h-8 bg-gray-100 rounded-lg w-48 animate-pulse" />
-          ) : (
-            <>
-              <p className="text-xs text-gray-400 mb-1">You're applying for</p>
-              <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
-                {job?.title}
-              </h1>
-              <p className="text-sm text-gray-400 mt-1">{job?.type}</p>
-              {job?.description && (
-                <p className="text-sm text-gray-500 mt-3 leading-relaxed">
-                  {job?.description}
-                </p>
-              )}
-            </>
-          )}
+    <div className="min-h-screen bg-[#f3f4f4]">
+      <header className="h-14 border-b border-[#e4e6e6] bg-white/90 backdrop-blur">
+        <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between px-5">
+          <div className="text-[31px] font-semibold tracking-[-0.02em] text-[#11543b]">
+            HireFlow
+          </div>
+
+          <nav className="hidden items-center gap-10 text-sm text-[#1f2b24] md:flex">
+            <span>Browse Jobs</span>
+            <span>Help Center</span>
+          </nav>
+
+          <button className="text-sm font-semibold text-[#11543b]">
+            Sign In
+          </button>
         </div>
+      </header>
 
-        {/* Form */}
-        <div className="bg-white border border-gray-100 rounded-2xl p-6 flex flex-col gap-4">
-          <h2 className="text-sm font-semibold text-gray-900">Your details</h2>
+      <main className="px-4 py-10">
+        <div className="mx-auto w-full max-w-lg rounded-[22px] border border-[#e4e6e6] bg-white p-8 shadow-[0_8px_35px_rgba(14,48,34,0.08)]">
+          <div className="mb-6 flex items-start gap-3">
+            <div className="mt-1 flex h-9 w-9 items-center justify-center rounded-full bg-[#d6efe1] text-[#0f6c45]">
+              <svg width="15" height="18" viewBox="0 0 15 18" fill="none">
+                <path
+                  d="M3 1.5H8.25L12 5.25V16.5H3V1.5Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M8.25 1.5V5.25H12"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
 
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">
-              Full name
-            </label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={set("name")}
-              placeholder="Alex Johnson"
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-gray-400"
-            />
+            <div>
+              <h1 className="text-[37px] font-semibold tracking-[-0.01em] text-[#1f2b24]">
+                Job Application
+              </h1>
+              <p className="mt-1 text-sm text-[#617067]">
+                Join our growing ecosystem
+              </p>
+            </div>
           </div>
 
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Email</label>
-            <input
-              type="email"
-              value={form.email}
-              onChange={set("email")}
-              placeholder="alex@example.com"
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-gray-400"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">
-              GitHub username
-            </label>
-            <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden focus-within:border-gray-400">
-              <span className="text-sm text-gray-400 px-3 py-2 bg-gray-50 border-r border-gray-200">
-                github.com/
-              </span>
+          <div className="space-y-4">
+            <div>
+              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-[#33433a]">
+                Full Name
+              </label>
               <input
                 type="text"
-                value={form.github}
-                onChange={set("github")}
-                placeholder="alexjohnson"
-                className="flex-1 text-sm px-3 py-2 outline-none"
+                value={form.fullName}
+                onChange={set("fullName")}
+                placeholder="Alex Rivers"
+                className="w-full rounded-xl border border-[#e4e6e6] px-4 py-3 text-sm text-[#1f2b24] outline-none placeholder:text-[#a2ada7] focus:border-[#b9c9bf]"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-[#33433a]">
+                Email Address
+              </label>
+              <input
+                type="email"
+                value={form.email}
+                onChange={set("email")}
+                placeholder="alex.rivers@example.com"
+                className="w-full rounded-xl border border-[#e4e6e6] px-4 py-3 text-sm text-[#1f2b24] outline-none placeholder:text-[#a2ada7] focus:border-[#b9c9bf]"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-[#33433a]">
+                GitHub Username
+              </label>
+              <div className="flex overflow-hidden rounded-xl border border-[#e4e6e6] focus-within:border-[#b9c9bf]">
+                <span className="border-r border-[#e4e6e6] bg-[#f9faf9] px-4 py-3 text-sm text-[#445449]">
+                  github.com/
+                </span>
+                <input
+                  type="text"
+                  value={form.githubUsername}
+                  onChange={set("githubUsername")}
+                  placeholder="username"
+                  className="w-full px-4 py-3 text-sm text-[#1f2b24] outline-none placeholder:text-[#a2ada7]"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-[#33433a]">
+                Resume (PDF)
+              </label>
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => fileInputRef.current?.click()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    fileInputRef.current?.click();
+                  }
+                }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragActive(true);
+                }}
+                onDragLeave={() => setDragActive(false)}
+                onDrop={handleDrop}
+                className={`rounded-2xl border border-dashed px-4 py-8 text-center transition-colors ${
+                  dragActive
+                    ? "border-[#7cb699] bg-[#eef8f2]"
+                    : "border-[#d8dcda] bg-[#f4f5f5]"
+                }`}
+              >
+                <div className="mx-auto mb-2 flex h-7 w-7 items-center justify-center text-[#0f6c45]">
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path
+                      d="M10 13.75V4.5"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M6.25 8.25L10 4.5L13.75 8.25"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M4.5 15.5H15.5"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </div>
+                {resumeFile ? (
+                  <>
+                    <p className="text-sm font-semibold text-[#1f2b24]">
+                      {resumeFile.name}
+                    </p>
+                    <p className="mt-1 text-xs text-[#617067]">
+                      Click to upload a different PDF
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-[#1f2b24]">
+                      Click to upload or drag and drop
+                    </p>
+                    <p className="mt-1 text-xs text-[#7a847f]">
+                      Maximum file size: 5MB
+                    </p>
+                  </>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,application/pdf"
+                className="hidden"
+                onChange={(e) => updateResumeFile(e.target.files?.[0])}
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">
-              Resume (PDF)
-            </label>
-            <div
-              onClick={() => document.getElementById("resume-input").click()}
-              className={`border border-dashed rounded-lg px-4 py-6 text-center cursor-pointer transition-colors
-                ${resumeFile ? "border-gray-300 bg-gray-50" : "border-gray-200 hover:border-gray-400"}`}
-            >
-              {resumeFile ? (
-                <div>
-                  <p className="text-sm text-gray-700 font-medium">
-                    {resumeFile.name}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">Click to change</p>
-                </div>
-              ) : (
-                <div>
-                  <p className="text-sm text-gray-400">
-                    Click to upload your resume
-                  </p>
-                  <p className="text-xs text-gray-300 mt-1">PDF only</p>
-                </div>
-              )}
-            </div>
-            <input
-              id="resume-input"
-              type="file"
-              accept=".pdf"
-              className="hidden"
-              onChange={(e) => setResumeFile(e.target.files[0])}
-            />
-          </div>
+          {(errorMessage || error) && (
+            <p className="mt-4 rounded-lg border border-[#f1cccc] bg-[#fff6f5] px-3 py-2 text-sm text-[#9a3530]">
+              {errorMessage || "Something went wrong. Please try again."}
+            </p>
+          )}
+
+          <button
+            onClick={handleSubmit}
+            disabled={
+              isPending ||
+              !form.fullName ||
+              !form.email ||
+              !form.githubUsername ||
+              !resumeFile
+            }
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0f6c45] py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#0d5c3b] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isPending ? "Submitting..." : "Submit Application"}
+            {!isPending && <span aria-hidden>→</span>}
+          </button>
         </div>
-
-        {/* Error */}
-        {error && (
-          <p className="mt-3 text-sm text-red-500 bg-red-50 border border-red-100 rounded-lg px-4 py-3">
-            Something went wrong. Please try again.
-          </p>
-        )}
-
-        {/* Submit */}
-        <button
-          onClick={handleSubmit}
-          disabled={
-            isPending ||
-            !form.name ||
-            !form.email ||
-            !form.github ||
-            !resumeFile
-          }
-          className="w-full mt-4 py-3 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
-        >
-          {isPending ? "Submitting..." : "Submit application"}
-        </button>
-
-        <p className="text-xs text-gray-300 text-center mt-3">
-          Your GitHub profile will be analysed as part of the review process.
-        </p>
-      </div>
+      </main>
     </div>
   );
 }

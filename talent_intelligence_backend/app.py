@@ -10,6 +10,7 @@ from utils.celery_setup import celery_init_app
 from routes.github_routes import github_bp
 from routes.job_routes import jobs_bp
 from routes.application_routes import application_bp
+from routes.check_portfolio_routes import check_portfolio_bp
 
 
 def create_app():
@@ -35,6 +36,7 @@ def create_app():
     app.register_blueprint(github_bp)
     app.register_blueprint(application_bp)
     app.register_blueprint(jobs_bp)
+    app.register_blueprint(check_portfolio_bp)
 
     return app
 

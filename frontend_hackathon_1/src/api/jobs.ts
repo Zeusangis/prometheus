@@ -48,6 +48,85 @@ type CompanyJobsResponse = {
   jobs: CompanyJob[];
 };
 
+export type JobDetail = {
+  id: number;
+  title: string;
+  description: string;
+  jobType: string;
+  status: "open" | "closed" | "draft";
+  location: string | null;
+  company: string;
+  posted_date: string;
+  languages: string[];
+  frameworks: string[];
+  interviewTone?: string;
+  interviewLength?: number;
+};
+
+export type JobApplicant = {
+  id: number;
+  job_id: number;
+  full_name: string;
+  email: string;
+  github_username: string | null;
+  filename: string | null;
+  raw_text: string | null;
+  status: string;
+  uploaded_at: string;
+};
+
+type JobDetailResponse = {
+  success: boolean;
+  job: JobDetail;
+};
+
+type JobApplicantsResponse = {
+  success: boolean;
+  applicants: JobApplicant[];
+};
+
+export function normalizeJobId(rawJobId: string) {
+  return rawJobId.startsWith("job_") ? rawJobId.slice(4) : rawJobId;
+}
+
+export async function getJobById(jobId: string): Promise<JobDetail> {
+  const normalizedJobId = normalizeJobId(jobId);
+  const response = await fetch(`${API_BASE_URL}/api/jobs/${normalizedJobId}`);
+  const payload = (await response
+    .json()
+    .catch(() => ({}))) as Partial<JobDetailResponse> & {
+    error?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Failed to fetch job details");
+  }
+
+  if (!payload.job) {
+    throw new Error("Invalid response while fetching job details");
+  }
+
+  return payload.job;
+}
+
+export async function getJobApplicants(jobId: string): Promise<JobApplicant[]> {
+  const normalizedJobId = normalizeJobId(jobId);
+  const response = await fetch(
+    `${API_BASE_URL}/api/jobs/${normalizedJobId}/applicants`,
+  );
+  const payload = (await response
+    .json()
+    .catch(() => ({}))) as Partial<JobApplicantsResponse> & {
+    error?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Failed to fetch applicants");
+  }
+
+  return payload.applicants ?? [];
+}
+
 export async function getCompanyJobs(): Promise<CompanyJob[]> {
   const response = await fetch(`${API_BASE_URL}/api/jobs/my-company`);
   const payload = (await response
