@@ -178,18 +178,24 @@ def get_my_company_jobs():
 
         # Require recruiter identity match (id/email/name/phone), with company fallback.
         if id_match or email_match or name_match or phone_match or company_match:
-            matched_jobs.append(job.to_dict())
+            job_data = job.to_dict()
+            matched_jobs.append(
+                {
+                    "id": f"job_{job.id}",
+                    "title": job_data.get("title"),
+                    "description": job_data.get("description"),
+                    "jobType": job_data.get("jobType"),
+                    "languages": job_data.get("languages", []),
+                    "frameworks": job_data.get("frameworks", []),
+                    "status": job_data.get("status"),
+                    "company": job_data.get("company"),
+                    "location": job_data.get("location"),
+                    "posted_date": job_data.get("posted_date"),
+                }
+            )
 
     return jsonify(
         {
-            "success": True,
-            "recruiter": {
-                "id": target_id,
-                "name": recruiter_data.get("name"),
-                "email": recruiter_data.get("email"),
-                "phone": recruiter_data.get("phone"),
-                "company": recruiter_data.get("company"),
-            },
             "jobs": matched_jobs,
         }
     )
