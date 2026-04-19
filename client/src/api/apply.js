@@ -1,5 +1,5 @@
 // src/api/apply.js
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:5000";
 
 const mockDelay = () => new Promise((res) => setTimeout(res, 800));
 
@@ -19,8 +19,21 @@ const mockDelay = () => new Promise((res) => setTimeout(res, 800));
  * The interviewLink is the unique URL sent to the candidate for their interview.
  */
 export async function submitApplication(jobId, formData) {
+  console.log("submitApplication payload:");
+  for (const [key, value] of formData.entries()) {
+    if (value instanceof File) {
+      console.log(key, {
+        name: value.name,
+        type: value.type,
+        size: value.size,
+      });
+    } else {
+      console.log(key, value);
+    }
+  }
+
   // --- REAL ---
-  const res = await fetch(`${import.meta.env.VITE_API_URL}/api/apply/${jobId}`, {
+  const res = await fetch(`${API_URL}/api/apply/${jobId}`, {
     method: "POST",
     body: formData,
   });
@@ -41,7 +54,8 @@ export async function getJobInfo(jobId) {
     id: jobId,
     title: "Senior Backend Engineer",
     type: "Remote",
-    description: "We are looking for a senior backend engineer to join our team and help build scalable systems.",
+    description:
+      "We are looking for a senior backend engineer to join our team and help build scalable systems.",
   };
   // --- REAL ---
   // const res = await fetch(`${API_URL}/api/jobs/${jobId}/info`);

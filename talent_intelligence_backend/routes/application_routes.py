@@ -16,6 +16,26 @@ def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def _get_form_value(*keys):
+    for key in keys:
+        value = request.form.get(key)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
+def _normalize_github_username(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+
+    raw = raw.replace("https://github.com/", "")
+    raw = raw.replace("http://github.com/", "")
+    raw = raw.replace("github.com/", "")
+    raw = raw.strip("/")
+    return raw
+
+
 def _parse_job_id(raw_job_id):
     """Support both numeric IDs (123) and prefixed IDs (job_123)."""
     if isinstance(raw_job_id, int):
@@ -30,8 +50,15 @@ def _parse_job_id(raw_job_id):
     return None
 
 
+def _resolve_application_job_id(job_id):
+    form_job_id = _parse_job_id(_get_form_value("jobId", "job_id"))
+    return job_id or form_job_id
+
+
 @application_bp.route("/api/apply/<int:job_id>", methods=["GET", "POST"])
+@application_bp.route("/api/jobs/<int:job_id>/apply", methods=["GET", "POST"])
 def apply_for_job(job_id):
+    job_id = _resolve_application_job_id(job_id)
 
     job = Job.query.get(job_id)
     if not job:
@@ -62,6 +89,18 @@ def apply_for_job(job_id):
     if not allowed_file(file.filename):
         return jsonify({"error": "Only PDF files are allowed"}), 400
 
+    full_name = _get_form_value("full_name", "fullName", "name")
+    email = _get_form_value("email")
+    github_username = _normalize_github_username(
+        _get_form_value("github_username", "githubUsername", "github")
+    )
+
+    if not full_name or not email:
+        return (
+            jsonify({"error": "Full name and email are required"}),
+            400,
+        )
+
     try:
         safe_filename = secure_filename(file.filename)
         unique_filename = f"{uuid.uuid4()}-{safe_filename}"
@@ -69,6 +108,9 @@ def apply_for_job(job_id):
         file.save(save_path)
 
         new_candidate = Candidate(
+            full_name=full_name,
+            email=email,
+            github_username=github_username or None,
             original_filename=file.filename,
             file_path=save_path,
             status="applied",
