@@ -85,8 +85,67 @@ type JobApplicantsResponse = {
   applicants: JobApplicant[];
 };
 
+type MoveCandidateNextStepResponse = {
+  success: boolean;
+  candidateId: number;
+  jobId: number;
+  status: string;
+  meeting_id: string | null;
+};
+
+type TotalJobsResponse = {
+  success: boolean;
+  total_jobs: number;
+};
+
 export function normalizeJobId(rawJobId: string) {
   return rawJobId.startsWith("job_") ? rawJobId.slice(4) : rawJobId;
+}
+
+export async function moveCandidateToNextStep(params: {
+  jobId: string;
+  candidateId: number;
+  nextStatus: string;
+}): Promise<MoveCandidateNextStepResponse> {
+  const normalizedJobId = normalizeJobId(params.jobId);
+  const parsedJobId = Number(normalizedJobId);
+
+  if (!Number.isInteger(parsedJobId)) {
+    throw new Error("Invalid job id");
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/jobs/${parsedJobId}/candidates/${params.candidateId}/next-step`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ next_status: params.nextStatus }),
+    },
+  );
+
+  const payload = (await response
+    .json()
+    .catch(() => ({}))) as Partial<MoveCandidateNextStepResponse> & {
+    error?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Failed to move candidate to next step");
+  }
+
+  if (!payload.success) {
+    throw new Error("Invalid response while moving candidate to next step");
+  }
+
+  return {
+    success: true,
+    candidateId: payload.candidateId ?? params.candidateId,
+    jobId: payload.jobId ?? parsedJobId,
+    status: payload.status ?? params.nextStatus,
+    meeting_id: payload.meeting_id ?? null,
+  };
 }
 
 export async function getJobById(jobId: string): Promise<JobDetail> {
@@ -140,6 +199,31 @@ export async function getCompanyJobs(): Promise<CompanyJob[]> {
   }
 
   return payload.jobs ?? [];
+}
+
+export async function getTotalJobs(): Promise<number> {
+  const endpoints = ["/api/jobs/total", "/api/jobs/count"];
+
+  for (const endpoint of endpoints) {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`);
+    const payload = (await response
+      .json()
+      .catch(() => ({}))) as Partial<TotalJobsResponse> & {
+      error?: string;
+    };
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        continue;
+      }
+
+      throw new Error(payload.error || "Failed to fetch total jobs count");
+    }
+
+    return payload.total_jobs ?? 0;
+  }
+
+  throw new Error("Jobs count endpoint not found");
 }
 
 export async function createJob(job: NewJobInput): Promise<CreatedJob> {

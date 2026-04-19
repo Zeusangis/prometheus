@@ -13,7 +13,7 @@ const menuItems = [
     icon: "briefcase",
     label: "Jobs",
     active: false,
-    badge: "24",
+    badge: null,
     to: "/dashboard/jobs",
   },
   { icon: "users", label: "Applicants", active: false, badge: null },

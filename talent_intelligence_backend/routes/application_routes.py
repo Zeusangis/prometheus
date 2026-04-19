@@ -4,7 +4,8 @@ import uuid
 from flask import Blueprint, current_app, jsonify, request
 from werkzeug.utils import secure_filename
 
-from models import Candidate, Job, db
+from models import Candidate, Job, MeetingSummary, db
+from models.candidate import STATUS_FLOW
 from tasks.resume_tasks import process_resume_task
 
 application_bp = Blueprint("application", __name__)
@@ -115,6 +116,62 @@ def apply_for_job(job_id):
             200,
         )
 
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc)}), 500
+
+
+@application_bp.route(
+    "/api/jobs/<int:job_id>/candidates/<int:candidate_id>/next-step", methods=["POST"]
+)
+@application_bp.route("/api/candidates/<int:candidate_id>/next-step", methods=["POST"])
+def move_to_next_step(candidate_id, job_id=None):
+    payload = request.get_json(silent=True) or {}
+    next_status = payload.get("next_status") or payload.get("status")
+    if not next_status:
+        return jsonify({"error": "next_status is required"}), 400
+    if next_status not in STATUS_FLOW:
+        return (
+            jsonify(
+                {
+                    "error": f"Invalid next_status. Must be one of: {', '.join(STATUS_FLOW)}"
+                }
+            ),
+            400,
+        )
+
+    candidate = Candidate.query.get(candidate_id)
+    if not candidate:
+        return jsonify({"error": "Candidate not found"}), 404
+
+    if job_id is not None and candidate.job_id != job_id:
+        return (
+            jsonify({"error": "Candidate does not belong to the provided job"}),
+            400,
+        )
+
+    create_meeting_id = uuid.uuid4().hex
+    if next_status == "interview_scheduled":
+        candidate.meeting_id = create_meeting_id
+        db.session.add(
+            MeetingSummary(candidate_id=candidate.id, meeting_id=create_meeting_id)
+        )
+    candidate.status = next_status
+
+    try:
+        db.session.commit()
+        return (
+            jsonify(
+                {
+                    "success": True,
+                    "candidateId": candidate.id,
+                    "jobId": candidate.job_id,
+                    "status": candidate.status,
+                    "meeting_id": candidate.meeting_id,
+                }
+            ),
+            200,
+        )
     except Exception as exc:
         db.session.rollback()
         return jsonify({"error": str(exc)}), 500

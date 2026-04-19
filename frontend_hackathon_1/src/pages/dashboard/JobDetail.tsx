@@ -1,8 +1,14 @@
 import { Link, useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Sidebar } from "../../components/Sidebar";
 import { Header } from "../../components/Header";
-import { getJobApplicants, getJobById } from "../../api/jobs";
+import {
+  getJobApplicants,
+  getJobById,
+  moveCandidateToNextStep,
+  type JobApplicant,
+} from "../../api/jobs";
 
 const pipelineStats = [
   { label: "Sourcing", value: 124, progress: 78 },
@@ -14,13 +20,41 @@ const pipelineStats = [
 
 const statusBadgeClassMap: Record<string, string> = {
   queued: "bg-secondary text-primary-dark",
+  uploaded: "bg-secondary text-primary-dark",
+  ats_scored: "bg-primary-lighter/35 text-primary-dark",
+  interview_scheduled: "bg-[#daf2e2] text-[#246747]",
+  interview_completed: "bg-[#dcecff] text-[#254f8d]",
+  offer_made: "bg-[#efe6ff] text-[#4f3a9e]",
+  hired: "bg-[#d8f6e4] text-[#1c7f4d]",
   screening: "bg-primary-lighter/35 text-primary-dark",
   shortlisted: "bg-[#daf2e2] text-[#246747]",
   rejected: "bg-[#ffe3e0] text-[#9a3530]",
 };
 
+const nextStatusMap: Record<string, string | null> = {
+  queued: "uploaded",
+  uploaded: "ats_scored",
+  ats_scored: "interview_scheduled",
+  interview_scheduled: "interview_completed",
+  interview_completed: "offer_made",
+  offer_made: "hired",
+  hired: null,
+  rejected: null,
+  screening: "ats_scored",
+  shortlisted: "interview_scheduled",
+};
+
+function toStatusLabel(status: string) {
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default function JobDetail() {
   const { jobId } = useParams({ from: "/dashboard/$jobId" });
+  const queryClient = useQueryClient();
+  const [actionError, setActionError] = useState<string | null>(null);
   const {
     data: job,
     isLoading,
@@ -39,6 +73,44 @@ export default function JobDetail() {
     queryFn: () => getJobApplicants(jobId),
     enabled: !!jobId,
   });
+
+  const moveStageMutation = useMutation({
+    mutationFn: async (params: { candidateId: number; nextStatus: string }) => {
+      return moveCandidateToNextStep({
+        jobId,
+        candidateId: params.candidateId,
+        nextStatus: params.nextStatus,
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["job-applicants", jobId],
+      });
+      setActionError(null);
+    },
+    onError: (error) => {
+      setActionError(
+        error instanceof Error
+          ? error.message
+          : "Failed to move candidate to next stage",
+      );
+    },
+  });
+
+  const handleMoveToNextStage = (applicant: JobApplicant) => {
+    const normalizedStatus = applicant.status.toLowerCase();
+    const nextStatus = nextStatusMap[normalizedStatus];
+
+    if (!nextStatus) {
+      return;
+    }
+
+    setActionError(null);
+    moveStageMutation.mutate({
+      candidateId: applicant.id,
+      nextStatus,
+    });
+  };
 
   const statusLabel =
     job?.status === "open"
@@ -198,6 +270,12 @@ export default function JobDetail() {
               </div>
 
               <div className="space-y-3">
+                {actionError ? (
+                  <article className="rounded-3xl border border-[#ffe3e0] bg-[#fff6f5] px-4 py-3 text-sm text-[#9a3530]">
+                    {actionError}
+                  </article>
+                ) : null}
+
                 {isApplicantsLoading ? (
                   <article className="rounded-3xl border border-border bg-card px-4 py-5 text-sm text-muted-foreground">
                     Loading applicants...
@@ -225,6 +303,10 @@ export default function JobDetail() {
                     const statusClass =
                       statusBadgeClassMap[normalizedStatus] ||
                       "bg-secondary text-primary-dark";
+                    const nextStatus = nextStatusMap[normalizedStatus];
+                    const isMovingThisCandidate =
+                      moveStageMutation.isPending &&
+                      moveStageMutation.variables?.candidateId === applicant.id;
 
                     return (
                       <article
@@ -280,7 +362,7 @@ export default function JobDetail() {
                           <span
                             className={`mt-1 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}
                           >
-                            {applicant.status}
+                            {toStatusLabel(applicant.status)}
                           </span>
                         </div>
 
@@ -293,10 +375,15 @@ export default function JobDetail() {
                         </Link>
 
                         <button
-                          disabled={normalizedStatus !== "queued"}
+                          onClick={() => handleMoveToNextStage(applicant)}
+                          disabled={!nextStatus || moveStageMutation.isPending}
                           className="rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary-light disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
                         >
-                          Move to Next Stage
+                          {isMovingThisCandidate
+                            ? "Moving..."
+                            : nextStatus
+                              ? `Move to ${toStatusLabel(nextStatus)}`
+                              : "Final Stage"}
                         </button>
                       </article>
                     );
