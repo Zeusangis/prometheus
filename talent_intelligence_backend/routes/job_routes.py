@@ -159,6 +159,7 @@ def get_my_company_jobs():
     target_name = _norm(recruiter_data.get("name"))
     target_phone = _norm(recruiter_data.get("phone"))
     target_company = _norm(recruiter_data.get("company"))
+    total_number_of_jobs = Job.query.count()
 
     matched_jobs = []
     for job in Job.query.all():
@@ -191,6 +192,7 @@ def get_my_company_jobs():
                     "company": job_data.get("company"),
                     "location": job_data.get("location"),
                     "posted_date": job_data.get("posted_date"),
+                    "total_jobs": total_number_of_jobs,
                 }
             )
 
