@@ -147,6 +147,30 @@ def get_job(job_id):
     return jsonify({"success": True, "job": job.to_dict()})
 
 
+@jobs_bp.route("/api/jobs/<job_id>/info", methods=["GET"])
+def get_job_info(job_id):
+    parsed_job_id = _parse_job_id(job_id)
+    if parsed_job_id is None:
+        return jsonify({"error": "Invalid job id"}), 400
+
+    job = Job.query.get(parsed_job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    job_data = job.to_dict()
+    return (
+        jsonify(
+            {
+                "id": f"job_{job.id}",
+                "title": job_data.get("title"),
+                "type": job_data.get("jobType") or job_data.get("location") or "Remote",
+                "description": job_data.get("description") or "",
+            }
+        ),
+        200,
+    )
+
+
 @jobs_bp.route("/api/jobs/my-company", methods=["GET"])
 @jobs_bp.route("/api/jobs/my-company/", methods=["GET"])
 def get_my_company_jobs():
@@ -188,6 +212,7 @@ def get_my_company_jobs():
                     "company": job_data.get("company"),
                     "location": job_data.get("location"),
                     "posted_date": job_data.get("posted_date"),
+                    "total_applicants": len(job.applicants),
                 }
             )
 

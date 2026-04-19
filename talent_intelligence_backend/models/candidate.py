@@ -28,6 +28,7 @@ class Candidate(db.Model):
             "github_username": self.github_username,
             "filename": self.original_filename,
             "status": self.status,
+            "raw_text": self.raw_text,
             "uploaded_at": self.uploaded_at.isoformat(),
             "job_id": self.job_id,
         }
