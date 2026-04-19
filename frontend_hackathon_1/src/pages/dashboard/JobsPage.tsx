@@ -1,10 +1,21 @@
+import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "../../components/Sidebar";
 import { Header } from "../../components/Header";
 import { JobsList } from "../../components/JobsList";
+import { getCompanyJobs } from "../../api/jobs";
 
 const filters = ["All Jobs", "Active", "Closed"];
 
 export default function JobsPage() {
+  const {
+    data: jobs = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: ["company-jobs"],
+    queryFn: getCompanyJobs,
+  });
+
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar />
@@ -45,8 +56,17 @@ export default function JobsPage() {
                 </div>
               </div>
             </section>
-
-            <JobsList />
+            {isLoading ? (
+              <div className="rounded-3xl border border-[#e1e6e3] bg-white p-10 text-center text-[#5a6a61]">
+                Loading jobs...
+              </div>
+            ) : error ? (
+              <div className="rounded-3xl border border-[#f3d7d6] bg-[#fff6f6] p-10 text-center text-[#9a3530]">
+                Failed to load jobs. Please make sure the backend is running.
+              </div>
+            ) : (
+              <JobsList jobs={jobs} />
+            )}
           </div>
         </main>
       </div>

@@ -206,7 +206,7 @@ export function Sidebar() {
           </svg>
         </div>
         <span className="text-xl font-bold text-sidebar-foreground">
-          HireFlow
+          TrueHire
         </span>
       </div>
 

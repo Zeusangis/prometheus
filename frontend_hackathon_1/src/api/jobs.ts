@@ -2,7 +2,7 @@ import { recordJobSubmission } from "./jobSubmissionLog";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-  "http://localhost:5000";
+  "http://127.0.0.1:5000";
 
 export type MetricConfig = {
   enabled: boolean;
@@ -28,6 +28,40 @@ export type CreatedJob = {
   id: string;
   applicationLink: string;
 };
+
+export type CompanyJob = {
+  id: string;
+  title: string;
+  description: string;
+  jobType: string;
+  languages: string[];
+  frameworks: string[];
+  location: string | null;
+  posted_date: string;
+  status: "open" | "closed" | "draft";
+  total_applicants: number;
+  company: string;
+};
+
+type CompanyJobsResponse = {
+  success: boolean;
+  jobs: CompanyJob[];
+};
+
+export async function getCompanyJobs(): Promise<CompanyJob[]> {
+  const response = await fetch(`${API_BASE_URL}/api/jobs/my-company`);
+  const payload = (await response
+    .json()
+    .catch(() => ({}))) as Partial<CompanyJobsResponse> & {
+    error?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Failed to fetch jobs");
+  }
+
+  return payload.jobs ?? [];
+}
 
 export async function createJob(job: NewJobInput): Promise<CreatedJob> {
   const response = await fetch(`${API_BASE_URL}/api/jobs`, {
