@@ -45,6 +45,7 @@ export default function NewJob() {
   const { mutate: createJob, isPending, error } = useCreateJob();
 
   const handleSubmit = () => {
+    console.log("Creating job:", jobData);
     createJob(jobData, {
       onSuccess: (newJob) => {
         alert(`Job created! Application link: ${newJob.applicationLink}`);
