@@ -92,46 +92,37 @@ def build_created_job_response(job):
 
 
 @jobs_bp.route("/api/jobs", methods=["POST"])
-@jobs_bp.route("/api/jobs/create", methods=["POST"])
-def create_job_route():
-    data = request.get_json(silent=True) or {}
-    job_payload = data.get("job") or {}
+def create_job():
+    payload = request.get_json()
+    job_data = payload.get("job", {})
 
-    title = job_payload.get("title")
-    job_type = job_payload.get("jobType")
-    description = job_payload.get("description")
-
-    if not title or not job_type or not description:
-        return jsonify({"error": "Title, job type, and description are required"}), 400
-
-    status = data.get("status", "open")
-    if status not in STATUS_OPTIONS:
-        return (
-            jsonify({"error": "Invalid status. Must be one of: open, closed, draft"}),
-            400,
-        )
-
-    recruiter_data = resolve_recruiter_data(data)
-    company_data = extract_company_data(recruiter_data)
-    company = job_payload.get("company") or data.get("company")
-    if not company and company_data:
-        company = company_data.get("name")
-    if not company:
-        company = "Unknown Company"
+    # Extract company from job info or recruiter_data fallback
+    company_name = job_data.get("company") or "Unknown Company"
 
     try:
+        # Use your model's classmethod to structure the initial data
         new_job = Job.from_frontend_payload(
-            data,
-            company=company,
-            recruiter_data=recruiter_data or None,
+            payload, company=company_name, recruiter_data=payload.get("recruiter_data")
         )
-        new_job.posted_date = datetime.now(timezone.utc)
+
         db.session.add(new_job)
         db.session.commit()
-        return jsonify(build_created_job_response(new_job)), 201
-    except Exception as exc:
+
+        # Returning the ID as a string or int is fine;
+        # your _parse_job_id handles both.
+        return (
+            jsonify(
+                {
+                    "id": new_job.id,
+                    "applicationLink": f"http://127.0.0.1:5000/api/apply/{new_job.id}",
+                    "createdAt": new_job.posted_date.isoformat(),
+                }
+            ),
+            201,
+        )
+    except Exception as e:
         db.session.rollback()
-        return jsonify({"error": f"Failed to create job: {exc}"}), 500
+        return jsonify({"error": f"Creation failed: {str(e)}"}), 500
 
 
 @jobs_bp.route("/api/jobs/<job_id>", methods=["GET"])
