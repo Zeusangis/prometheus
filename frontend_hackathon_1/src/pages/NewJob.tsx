@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { createJob } from "../api/jobs";
 import type { CreatedJob, NewJobInput } from "../api/jobs";
+import { consoleData, consoleNewJobFormData } from "../utils/consoleData";
 import JobDetails from "../components/jobs/steps/JobDetails";
 import ScraperConfig from "../components/jobs/steps/ScraperConfig";
 import InterviewSetup from "../components/jobs/steps/InterviewSetup";
@@ -56,8 +57,11 @@ export default function NewJob() {
   } = useMutation<CreatedJob, Error, NewJobInput>({ mutationFn: createJob });
 
   const handleSubmit = () => {
+    consoleNewJobFormData(jobData);
+
     submitJob(jobData, {
       onSuccess: (newJob) => {
+        consoleData("Create Job Success", newJob);
         setCreatedJob(newJob);
       },
     });

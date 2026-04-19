@@ -52,5 +52,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-/client
-/client/*
+*/dist
+*/dist-ssr
+*.local

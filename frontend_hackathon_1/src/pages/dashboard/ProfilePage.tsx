@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import { Sidebar } from "../../components/Sidebar";
 import { Header } from "../../components/Header";
 import ResumeSection from "./ResumeSection";
@@ -136,6 +136,13 @@ export default function ProfilePage() {
                 </div>
 
                 <div className="flex flex-wrap gap-2">
+                  <Link
+                    to="/profile/$candidateId/interview-summary"
+                    params={{ candidateId }}
+                    className="rounded-xl border border-[#d4dfd9] bg-white px-4 py-2 text-sm font-semibold text-[#37443d]"
+                  >
+                    Interview Summary Page
+                  </Link>
                   <button className="rounded-xl border border-[#d4dfd9] bg-white px-4 py-2 text-sm font-semibold text-[#37443d]">
                     Share Profile
                   </button>
@@ -167,7 +174,7 @@ export default function ProfilePage() {
 
             {activeTab === "Resume" ? (
               <ResumeSection data={resumeAnalysisData} />
-            ) : activeTab === "Interview History" ? (
+            ) : activeTab === "Interview Summary" ? (
               <section className="grid grid-cols-1 gap-5 xl:grid-cols-[2fr_1fr]">
                 {/* Interview Summary with Score */}
                 <div className="flex flex-col gap-5">

@@ -14,6 +14,7 @@ import JobsPage from "./pages/dashboard/JobsPage";
 import JobDetail from "./pages/dashboard/JobDetail";
 import CandidateDetail from "./pages/dashboard/CandidateDetail";
 import ProfilePage from "./pages/dashboard/ProfilePage";
+import InterviewSummaryPage from "./pages/dashboard/InterviewSummaryPage";
 import ApplyPage from "./pages/apply/ApplyPage";
 import "./index.css";
 
@@ -69,6 +70,12 @@ const profileRoute = createRoute({
   component: ProfilePage,
 });
 
+const interviewSummaryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/profile/$candidateId/interview-summary",
+  component: InterviewSummaryPage,
+});
+
 const applyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/apply/$jobId",
@@ -88,6 +95,7 @@ const routeTree = rootRoute.addChildren([
   jobDetailRoute,
   candidateDetailRoute,
   profileRoute,
+  interviewSummaryRoute,
   applyRoute,
   newJobRoute,
 ]);
