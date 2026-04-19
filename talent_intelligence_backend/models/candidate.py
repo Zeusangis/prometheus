@@ -6,6 +6,9 @@ class Candidate(db.Model):
     __tablename__ = "candidates"
 
     id = db.Column(db.Integer, primary_key=True)
+    full_name = db.Column(db.String(255), nullable=True)
+    email = db.Column(db.String(255), nullable=True)
+    github_username = db.Column(db.String(255), nullable=True)
     original_filename = db.Column(db.String(255), nullable=False)
     file_path = db.Column(db.String(500), nullable=False, unique=True)
     job_id = db.Column(db.Integer, db.ForeignKey("jobs.id"), nullable=True)
@@ -20,6 +23,9 @@ class Candidate(db.Model):
     def to_dict(self):
         return {
             "id": self.id,
+            "full_name": self.full_name or "",
+            "email": self.email or "",
+            "github_username": self.github_username,
             "filename": self.original_filename,
             "status": self.status,
             "uploaded_at": self.uploaded_at.isoformat(),
