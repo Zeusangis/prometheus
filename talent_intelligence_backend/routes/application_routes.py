@@ -6,7 +6,7 @@ from werkzeug.utils import secure_filename
 from tasks.resume_tasks import process_resume_task
 
 
-from models import Candidate, db
+from models import Candidate, Job, db
 
 ALLOWED_EXTENSIONS = {"pdf"}
 application_bp = Blueprint("application", __name__)
@@ -16,8 +16,27 @@ def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-@application_bp.route("/api/apply/<int:job_id>", methods=["POST"])
+@application_bp.route("/api/apply/<int:job_id>", methods=["GET", "POST"])
 def apply_for_job(job_id):
+
+    job = Job.query.get(job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    if request.method == "GET":
+        return (
+            jsonify(
+                {
+                    "message": "Application endpoint is available. Submit a POST multipart/form-data request with a 'resume' PDF file.",
+                    "jobId": job_id,
+                    "jobTitle": job.title,
+                    "method": "POST",
+                    "contentType": "multipart/form-data",
+                    "requiredField": "resume",
+                }
+            ),
+            200,
+        )
 
     if "resume" not in request.files:
         return jsonify({"error": "No file key 'resume' found in request"}), 400
