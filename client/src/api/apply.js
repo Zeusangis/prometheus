@@ -19,19 +19,13 @@ const mockDelay = () => new Promise((res) => setTimeout(res, 800));
  * The interviewLink is the unique URL sent to the candidate for their interview.
  */
 export async function submitApplication(jobId, formData) {
-  // --- MOCK ---
-  await mockDelay();
-  return {
-    id: `application_${Date.now()}`,
-    interviewLink: `https://yourapp.com/interview/token_${Date.now()}`,
-  };
   // --- REAL ---
-  // const res = await fetch(`${API_URL}/api/jobs/${jobId}/apply`, {
-  //   method: "POST",
-  //   body: formData, // send as FormData so the resume file is included
-  // });
-  // if (!res.ok) throw new Error("Failed to submit application");
-  // return res.json();
+  const res = await fetch(`${import.meta.env.VITE_API_URL}/api/apply/${jobId}`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) throw new Error("Failed to submit application");
+  return res.json();
 }
 
 /**
