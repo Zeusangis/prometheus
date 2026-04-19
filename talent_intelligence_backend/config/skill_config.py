@@ -220,3 +220,115 @@ SKILL_KEYWORDS = {
         "hadoop",
     ],
 }
+
+GITHUB_LANGUAGE_MAP = {
+    "Python": "python",
+    "JavaScript": "javascript",
+    "TypeScript": "typescript",
+    "Java": "java",
+    "Go": "go",
+    "Rust": "rust",
+    "C++": "c / c++",
+    "C": "c / c++",
+    "Ruby": "ruby",
+    "PHP": "php",
+    "Swift": "mobile",
+    "Kotlin": "mobile",
+    "Shell": "docker / devops",
+    "HCL": "cloud",
+}
+
+QUALITY_KEYWORDS = {"api", "backend", "system", "service", "engine"}
+
+LIBRARY_MARKERS = {
+    "library",
+    "framework",
+    "sdk",
+    "cli",
+    "toolkit",
+    "plugin",
+    "package",
+    "module",
+    "runtime",
+    "lib",
+}
+
+EDUCATIONAL_MARKERS = {
+    "freecodecamp",
+    "course",
+    "curriculum",
+    "lesson",
+    "lecture",
+    "workshop",
+    "homework",
+    "assignment",
+    "exercise",
+    "solutions",
+    "labs",
+    "bootcamp",
+}
+
+TUTORIAL_MARKERS = {
+    "100 days of code",
+    "100-days-of-code",
+    "100days",
+    "clone",
+    "demo",
+    "tutorial",
+    "beginner",
+    "starter",
+    "boilerplate",
+    "practice",
+    "leetcode",
+}
+
+REPO_TYPE_WEIGHTS = {
+    "personal_project": 1.0,
+    "library_or_framework": 0.7,
+    "unknown": 0.3,
+    "organization_repo": 0.2,
+    "tutorial_or_clone": 0.1,
+    "educational_content": 0.0,
+}
+
+STRUCTURE_MARKERS = {
+    "src",
+    "tests",
+    "test",
+    "docs",
+    "doc",
+    "modular",
+    "monorepo",
+    "architecture",
+    "service",
+    "api",
+    "backend",
+}
+
+PACKAGE_MARKERS = {
+    "package.json",
+    "requirements.txt",
+    "pyproject.toml",
+    "setup.py",
+    "pom.xml",
+    "build.gradle",
+    "cargo.toml",
+    "go.mod",
+    "composer.json",
+    "dockerfile",
+    "tsconfig.json",
+    "vite.config",
+    "webpack",
+}
+
+SIGNAL_WEIGHTS = {
+    "language": 1.0,
+    "topic": 0.6,
+    "keyword": 0.3,
+    "structure": 0.5,
+}
+
+REPO_SIGNAL_CAP = 1.0
+EXCEPTIONAL_CONFIDENCE_THRESHOLD = 0.85
+MIN_REPO_VIABILITY = 0.08
+MIN_CONFIRMED_SIGNALS = 2

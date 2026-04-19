@@ -1,4 +1,6 @@
 from datetime import datetime, timezone
+import json
+from pathlib import Path
 
 from flask import Blueprint, jsonify, request
 
@@ -7,6 +9,8 @@ from models import Job, db
 
 STATUS_OPTIONS = {"open", "closed", "draft"}
 jobs_bp = Blueprint("jobs", __name__)
+
+_RECRUITER_FILE = Path(__file__).resolve().parent.parent / "static" / "recruiter.json"
 
 
 def extract_company_data(recruiter_data):
@@ -30,69 +34,225 @@ def extract_company_data(recruiter_data):
     return None
 
 
+def load_default_recruiter_data():
+    try:
+        raw = _RECRUITER_FILE.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except Exception:
+        return {}
+
+    recruiters = data.get("recruiters") or []
+    if not recruiters:
+        return {}
+    return recruiters[0] if isinstance(recruiters[0], dict) else {}
+
+
+def resolve_recruiter_data(data):
+    recruiter_data = data.get("recruiter") or data.get("recruiter_data") or {}
+    if recruiter_data:
+        return recruiter_data
+    return load_default_recruiter_data()
+
+
+def _parse_job_id(raw_job_id):
+    """Support both numeric IDs (123) and prefixed IDs (job_123)."""
+    if isinstance(raw_job_id, int):
+        return raw_job_id
+
+    raw = str(raw_job_id or "").strip()
+    if raw.startswith("job_"):
+        raw = raw[4:]
+
+    if raw.isdigit():
+        return int(raw)
+    return None
+
+
+def _isoformat_z(dt):
+    if not dt:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def build_created_job_response(job):
+    application_link = f"{request.host_url.rstrip('/')}/api/apply/{job.id}"
+    return {
+        "id": f"job_{job.id}",
+        "applicationLink": application_link,
+        "createdAt": _isoformat_z(job.posted_date),
+    }
+
+
+@jobs_bp.route("/api/jobs", methods=["POST"])
 @jobs_bp.route("/api/jobs/create", methods=["POST"])
 def create_job_route():
-
     data = request.get_json(silent=True) or {}
-    title = data.get("title")
-    description = data.get("description")
-    recruiter_data = data.get("recruiter") or data.get("recruiter_data") or {}
-    company_data = extract_company_data(recruiter_data)
-    company = data.get("company")
-    if not company and company_data:
-        company = company_data.get("name")
-    location = data.get("location")
-    requirements = data.get("requirements")
-    status = data.get("status", "open")
+    job_payload = data.get("job") or {}
 
+    title = job_payload.get("title")
+    job_type = job_payload.get("jobType")
+    description = job_payload.get("description")
+
+    if not title or not job_type or not description:
+        return jsonify({"error": "Title, job type, and description are required"}), 400
+
+    status = data.get("status", "open")
     if status not in STATUS_OPTIONS:
         return (
             jsonify({"error": "Invalid status. Must be one of: open, closed, draft"}),
             400,
         )
 
-    if not title or not description or not company:
-        return jsonify({"error": "Title, description, and company are required"}), 400
+    recruiter_data = resolve_recruiter_data(data)
+    company_data = extract_company_data(recruiter_data)
+    company = job_payload.get("company") or data.get("company")
+    if not company and company_data:
+        company = company_data.get("name")
+    if not company:
+        company = "Unknown Company"
 
     try:
-        new_job = Job(
-            title=title,
-            description=description,
+        new_job = Job.from_frontend_payload(
+            data,
             company=company,
-            location=location,
-            requirements=requirements,
             recruiter_data=recruiter_data or None,
-            status=status,
-            posted_date=datetime.now(timezone.utc),
         )
+        new_job.posted_date = datetime.now(timezone.utc)
         db.session.add(new_job)
         db.session.commit()
-        return (
-            jsonify({"message": "Job created successfully", "job": new_job.to_dict()}),
-            201,
-        )
+        return jsonify(build_created_job_response(new_job)), 201
     except Exception as exc:
         db.session.rollback()
-        return (
-            jsonify({"error": f"Failed to create job: {exc}"}),
-            500,
-        )
+        return jsonify({"error": f"Failed to create job: {exc}"}), 500
 
 
-@jobs_bp.route("/api/jobs/<int:job_id>", methods=["GET"])
+@jobs_bp.route("/api/jobs/<job_id>", methods=["GET"])
 def get_job(job_id):
-    job = Job.query.get(job_id)
+    parsed_job_id = _parse_job_id(job_id)
+    if parsed_job_id is None:
+        return jsonify({"error": "Invalid job id"}), 400
+
+    job = Job.query.get(parsed_job_id)
     if not job:
         return jsonify({"error": "Job not found"}), 404
+
     return jsonify({"success": True, "job": job.to_dict()})
 
 
-# route for getting all applicants for a job
-@jobs_bp.route("/api/jobs/<int:job_id>/applicants", methods=["GET"])
+@jobs_bp.route("/api/jobs/<job_id>/applicants", methods=["GET"])
 def get_job_applicants(job_id):
-    job = Job.query.get(job_id)
+    parsed_job_id = _parse_job_id(job_id)
+    if parsed_job_id is None:
+        return jsonify({"error": "Invalid job id"}), 400
+
+    job = Job.query.get(parsed_job_id)
     if not job:
         return jsonify({"error": "Job not found"}), 404
 
     applicants = [candidate.to_dict() for candidate in job.applicants]
     return jsonify({"success": True, "applicants": applicants})
+
+
+@jobs_bp.route("/api/jobs/<job_id>/scraper", methods=["POST"])
+def update_job_scraper(job_id):
+    parsed_job_id = _parse_job_id(job_id)
+    if parsed_job_id is None:
+        return jsonify({"error": "Invalid job id"}), 400
+
+    job = Job.query.get(parsed_job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    job.scraper_config = {
+        "scraperMetrics": data.get("scraperMetrics") or {},
+        "scraperInstructions": data.get("scraperInstructions") or "",
+    }
+
+    try:
+        db.session.commit()
+        return jsonify({"success": True, "job": job.to_dict()}), 200
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"error": f"Failed to update scraper config: {exc}"}), 500
+
+
+@jobs_bp.route("/api/jobs/<job_id>/interview", methods=["POST"])
+def update_job_interview(job_id):
+    parsed_job_id = _parse_job_id(job_id)
+    if parsed_job_id is None:
+        return jsonify({"error": "Invalid job id"}), 400
+
+    job = Job.query.get(parsed_job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    job.interview_config = {
+        "interviewTone": data.get("interviewTone") or "",
+        "interviewFocus": list(data.get("interviewFocus") or []),
+        "customQuestions": list(data.get("customQuestions") or []),
+        "interviewLength": data.get("interviewLength"),
+        "interviewInstructions": data.get("interviewInstructions") or "",
+    }
+
+    try:
+        db.session.commit()
+        return jsonify({"success": True, "job": job.to_dict()}), 200
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"error": f"Failed to update interview config: {exc}"}), 500
+
+
+@jobs_bp.route("/api/jobs/<job_id>/status", methods=["POST"])
+def update_job_status(job_id):
+    parsed_job_id = _parse_job_id(job_id)
+    if parsed_job_id is None:
+        return jsonify({"error": "Invalid job id"}), 400
+
+    job = Job.query.get(parsed_job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    status = data.get("status")
+    if status not in STATUS_OPTIONS:
+        return (
+            jsonify({"error": "Invalid status. Must be one of: open, closed, draft"}),
+            400,
+        )
+
+    try:
+        job.status = status
+        db.session.commit()
+        return jsonify({"success": True, "job": job.to_dict()}), 200
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"error": f"Failed to update status: {exc}"}), 500
+
+
+@jobs_bp.route("/api/jobs", methods=["GET"])
+@jobs_bp.route("/api/jobs/", methods=["GET"])
+def list_jobs():
+    jobs = Job.query.all()
+    summaries = []
+    for job in jobs:
+        job_data = job.to_dict()
+        summaries.append(
+            {
+                "id": f"job_{job.id}",
+                "title": job_data.get("title"),
+                "description": job_data.get("description"),
+                "jobType": job_data.get("jobType"),
+                "languages": job_data.get("languages", []),
+                "frameworks": job_data.get("frameworks", []),
+                "status": job_data.get("status"),
+                "company": job_data.get("company"),
+                "location": job_data.get("location"),
+                "posted_date": job_data.get("posted_date"),
+            }
+        )
+
+    return jsonify({"success": True, "jobs": summaries})

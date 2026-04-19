@@ -2,13 +2,33 @@
 import { TagGroup } from "../../../components/WizardComponents";
 
 const LANGUAGES = [
-  "Python", "JavaScript", "TypeScript", "Go", "Rust",
-  "Java", "C++", "Ruby", "Swift", "Kotlin", "PHP", "Scala",
+  "Python",
+  "JavaScript",
+  "TypeScript",
+  "Go",
+  "Rust",
+  "Java",
+  "C++",
+  "Ruby",
+  "Swift",
+  "Kotlin",
+  "PHP",
+  "Scala",
 ];
 
 const FRAMEWORKS = [
-  "React", "Node.js", "Django", "FastAPI", "Next.js",
-  "Docker", "Kubernetes", "GraphQL", "PostgreSQL", "Redis", "AWS", "GCP",
+  "React",
+  "Node.js",
+  "Django",
+  "FastAPI",
+  "Next.js",
+  "Docker",
+  "Kubernetes",
+  "GraphQL",
+  "PostgreSQL",
+  "Redis",
+  "AWS",
+  "GCP",
 ];
 
 export default function JobDetails({ data, onChange }) {
@@ -16,15 +36,18 @@ export default function JobDetails({ data, onChange }) {
 
   return (
     <div className="flex flex-col gap-4">
-
       {/* Basic info */}
       <div className="bg-white border border-gray-100 rounded-2xl p-6">
         <h2 className="text-sm font-semibold text-gray-900">Job details</h2>
-        <p className="text-xs text-gray-400 mt-0.5 mb-4">Basic information about the role.</p>
+        <p className="text-xs text-gray-400 mt-0.5 mb-4">
+          Basic information about the role.
+        </p>
 
         <div className="flex flex-col gap-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Job title</label>
+            <label className="block text-xs text-gray-500 mb-1">
+              Job title
+            </label>
             <input
               type="text"
               value={data.title}
@@ -55,7 +78,9 @@ export default function JobDetails({ data, onChange }) {
           </div>
 
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Role description</label>
+            <label className="block text-xs text-gray-500 mb-1">
+              Role description
+            </label>
             <textarea
               value={data.description}
               onChange={set("description")}
@@ -70,11 +95,15 @@ export default function JobDetails({ data, onChange }) {
       {/* Skills */}
       <div className="bg-white border border-gray-100 rounded-2xl p-6">
         <h2 className="text-sm font-semibold text-gray-900">Required skills</h2>
-        <p className="text-xs text-gray-400 mt-0.5 mb-4">Select the languages and tools candidates should know.</p>
+        <p className="text-xs text-gray-400 mt-0.5 mb-4">
+          Select the languages and tools candidates should know.
+        </p>
 
         <div className="flex flex-col gap-4">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Languages</label>
+            <label className="block text-xs text-gray-500 mb-1">
+              Languages
+            </label>
             <TagGroup
               options={LANGUAGES}
               selected={data.languages}
@@ -82,7 +111,9 @@ export default function JobDetails({ data, onChange }) {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Frameworks & tools</label>
+            <label className="block text-xs text-gray-500 mb-1">
+              Frameworks & tools
+            </label>
             <TagGroup
               options={FRAMEWORKS}
               selected={data.frameworks}
@@ -91,7 +122,6 @@ export default function JobDetails({ data, onChange }) {
           </div>
         </div>
       </div>
-
     </div>
   );
 }
