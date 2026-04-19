@@ -1,6 +1,7 @@
 // src/pages/dashboard/Dashboard.jsx
 import { useNavigate } from "@tanstack/react-router";
 import { useDashboardJobs } from "../../hooks/useCandidates";
+import { useCompany } from "../../hooks/useCandidates";
 import {
   BarChart,
   Bar,
@@ -73,7 +74,13 @@ const BarTooltip = ({ active, payload, label }) => {
 };
 
 export default function Dashboard() {
-  const { data: jobs, isLoading, error } = useDashboardJobs();
+  const { data: companyData, isLoading, error } = useCompany();
+  const jobs = companyData?.jobs?.map(j => ({
+    ...j,
+    type: j.jobType,
+    createdAt: j.posted_date,
+    applicantCount: j.applicantCount ?? 0,
+  })) ?? [];
   const navigate = useNavigate();
 
   const totalApplicants = jobs?.reduce((sum, j) => sum + j.applicantCount, 0) ?? 0;
