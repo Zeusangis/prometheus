@@ -204,6 +204,7 @@ def get_my_company_jobs():
 
 
 @jobs_bp.route("/api/jobs/<job_id>/applicants", methods=["GET"])
+@jobs_bp.route("/api/jobs/<job_id>/applicants/", methods=["GET"])
 def get_job_applicants(job_id):
     parsed_job_id = _parse_job_id(job_id)
     if parsed_job_id is None:
@@ -218,6 +219,7 @@ def get_job_applicants(job_id):
 
 
 @jobs_bp.route("/api/jobs/<job_id>/scraper", methods=["POST"])
+@jobs_bp.route("/api/jobs/<job_id>/scraper/", methods=["POST"])
 def update_job_scraper(job_id):
     parsed_job_id = _parse_job_id(job_id)
     if parsed_job_id is None:
