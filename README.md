@@ -1,145 +1,59 @@
-# AI Talent Intelligence System
+# Prometheus
 
-## Overview
+AI-powered technical recruiting — screen candidates smarter, not harder.
 
-This project is a full-funnel AI-powered talent evaluation system that goes beyond traditional Applicant Tracking Systems (ATS).
+## Problem
 
-Instead of relying on resumes and keyword matching, it builds a multi-stage verification pipeline that evaluates candidates using:
+Technical recruiting is broken. Recruiters can't evaluate code, so they rely on resumes that are easy to fake. Candidates list skills they don't have, and engineers waste hours in interviews with people who aren't qualified. There's no fast, objective way to know if someone can actually do the job.
 
-- real code evidence
-- AI interviews
-- dynamic skill validation
-- human-in-the-loop decision making
+## Solution
 
-The system ensures that hiring decisions are based on verified ability, not self-reported claims.
+Prometheus gives recruiters an AI-powered pipeline that automatically verifies a candidate's technical ability before any human time is spent. It scrapes their GitHub profile, analyses their actual code against the job requirements, and then conducts an AI interview that digs into their real understanding of their own work.
 
-## System Architecture (6 Stages)
+## How it works
 
-### Stage 1: Intelligent Job Description Builder
+1. Recruiter creates a job posting and configures what to look for — languages, code quality metrics, interview tone, and custom questions
+2. Candidate receives a link (via LinkedIn, email, etc.) and fills out a simple application form with their resume and GitHub username
+3. Prometheus scrapes their GitHub and scores them across metrics like language match, code quality, security practices, and test coverage
+4. The AI interviewer conducts a personalised interview based on their actual GitHub projects, asking them to explain their own code and decisions
+5. Recruiter sees a full dashboard with scores, GitHub analysis, and the complete interview transcript for every candidate
 
-- Input: raw job title + requirements
-- Output: structured, bias-reduced job description
-- Removes exclusionary language and organizes skills into required vs optional
+## Key features
 
-### Stage 2: Resume Screening + GitHub Skill Verification
+- **GitHub scraper** — analyses real code against configurable metrics with weighted scoring
+- **AI interviewer** — conducts personalised interviews based on each candidate's actual GitHub profile
+- **Job creation wizard** — 4-step setup for job details, scraper config, interview setup, and review
+- **Recruiter dashboard** — overview of all jobs, applicant counts, and score distributions
+- **Candidate detail page** — full breakdown of scores, GitHub analysis summary, and interview transcript
+- **Applicant-facing flow** — clean application form and AI interview interface via shareable link
 
-This is the core differentiation layer.
+## AI usage
 
-#### Resume Processing
+- **GitHub analysis** — AI reads and evaluates the candidate's repositories, assessing code quality, security practices, and how well their skills match the job requirements
+- **AI interviewer** — conducts the interview dynamically, asking follow-up questions based on the candidate's GitHub profile and probing deeper when answers need clarification
+- **Interview summary** — AI generates a written assessment of the candidate after the interview completes
 
-- Extracts skills from uploaded resume
-- Matches against job description
+## Tech stack
 
-#### GitHub Intelligence Module
+**Frontend** — React, Vite, TanStack Router, TanStack Query, Tailwind CSS, Recharts
 
-The system analyzes a candidate's public GitHub profile using the GitHub API.
+**Backend** — Python, Flask (or FastAPI)
 
-It:
+## Running locally
 
-- Fetches repositories and languages used
-- Analyzes code distribution across projects
-- Aggregates evidence of technical skills
-- Builds a confidence-based skill profile
-
-#### Output
-
-```json
-{
-  "skills": {
-    "python": {
-      "confidence": 0.85,
-      "evidence": ["api-service", "ml-project"]
-    },
-    "docker": {
-      "confidence": 0.6,
-      "evidence": ["deployment-tool"]
-    }
-  },
-  "developer_level": "intermediate"
-}
+### Frontend
+```bash
+cd client
+npm install
+npm run dev
 ```
 
-This ensures that claimed skills are backed by real coding evidence, not just resume text.
+### Backend
+```bash
+cd server
+pip install -r requirements.txt
+python app.py
+```
 
-### Stage 3: Adaptive AI Interview Engine
-
-- AI conducts live interview using Claude API
-- Questions adapt based on resume + GitHub findings
-- Weak or unverified skills are probed further in real-time
-
-### Stage 4: Real-Time Transcription System
-
-- Browser-based audio capture
-- WebSocket streaming backend
-- Whisper API for low-latency transcription
-
-### Stage 5: Transcript Analysis + Bias Audit
-
-- Evaluates candidate responses
-- Scores communication + technical depth
-- Detects interviewer bias in questioning patterns
-
-### Stage 6: Offer Engine + Human Override (HITL)
-
-- Generates hiring recommendation
-- Creates offer letter + onboarding plan
-- Recruiter has final override control
-
-## Key Innovation
-
-Unlike traditional hiring systems, this platform replaces assumptions with verified engineering signals.
-
-It combines:
-
-- Resume claims
-- Real GitHub code evidence
-- Adaptive AI interviews
-- Structured evaluation scoring
-
-## Tech Stack
-
-- Python (Flask backend)
-- GitHub API integration
-- Claude API (LLM reasoning layer)
-- Whisper API (speech-to-text)
-- WebSockets (real-time streaming)
-- pdfplumber (resume parsing)
-
-## GitHub Intelligence Module (Core Feature)
-
-This subsystem analyzes a candidate's GitHub activity to infer:
-
-- Programming languages used
-- Skill strength based on real repository usage
-- Engineering maturity level
-- Evidence-backed skill validation
-
-It transforms raw GitHub data into a structured skill confidence model, forming the foundation of technical verification in the pipeline.
-
-## Why This Project Matters
-
-Traditional ATS systems:
-
-- rely on keywords
-- miss real skill depth
-- are easily gamed
-
-This system:
-
-- verifies actual code contributions
-- adapts interviews dynamically
-- reduces hiring bias
-- improves signal quality in recruitment
-
-## Future Enhancements
-
-- Code architecture analysis (AST-based deep review)
-- Continuous skill tracking post-hire
-- Team composition optimization engine
-- Career path recommendation system
-
-## Summary
-
-This is not just a hiring tool.
-
-It is a multi-stage AI talent intelligence system that verifies, evaluates, and predicts engineering capability using real-world data.
+### Environment variables
+Create a `.env` file inside the `client/` folder:
