@@ -36,6 +36,12 @@ const MOCK_CANDIDATES = [
   { id: "c_9",  jobId: "job_5",  name: "Chris Lee",     github: "chrislee",     appliedAt: "2025-01-20T00:00:00Z", overallScore: 76, languageMatch: 78, codeQuality: 74, codeSecurity: 70, topLanguages: ["Figma", "React"],        teamFit: "Good",     engineerLevel: "Mid-level", interviewComplete: false },
   { id: "c_10", jobId: "job_6",  name: "Dana White",    github: "danawhite",    appliedAt: "2025-01-21T00:00:00Z", overallScore: 82, languageMatch: 85, codeQuality: 80, codeSecurity: 77, topLanguages: ["Spark", "Python"]}];
 
+export async function getCompany() {
+  const res = await fetch("http://127.0.0.1:5000/api/jobs/my-company");
+  if (!res.ok) throw new Error("Failed to fetch company jobs");
+  return res.json();
+}
+
 export async function getJobs() {
   await mockDelay();
   return MOCK_JOBS;
