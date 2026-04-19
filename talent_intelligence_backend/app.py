@@ -1,6 +1,7 @@
 import os
 
 from flask import Flask
+from flask_cors import CORS
 from flask_migrate import Migrate
 from config import Config
 from models import db
@@ -14,6 +15,26 @@ from routes.application_routes import application_bp
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
+
+    frontend_origin_env = os.getenv("FRONTEND_ORIGIN", "")
+    allowed_origins = [
+        origin.strip() for origin in frontend_origin_env.split(",") if origin.strip()
+    ]
+    if not allowed_origins:
+        allowed_origins = [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
+
+    CORS(
+        app,
+        resources={
+            r"/api/*": {"origins": allowed_origins},
+            r"/github/*": {"origins": allowed_origins},
+        },
+    )
 
     # It's usually better to put these inside your config.py,
     # but defining them here works perfectly fine for now!
