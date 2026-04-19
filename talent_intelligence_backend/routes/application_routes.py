@@ -16,6 +16,20 @@ def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def _parse_job_id(raw_job_id):
+    """Support both numeric IDs (123) and prefixed IDs (job_123)."""
+    if isinstance(raw_job_id, int):
+        return raw_job_id
+
+    raw = str(raw_job_id or "").strip()
+    if raw.startswith("job_"):
+        raw = raw[4:]
+
+    if raw.isdigit():
+        return int(raw)
+    return None
+
+
 @application_bp.route("/api/apply/<int:job_id>", methods=["GET", "POST"])
 def apply_for_job(job_id):
 
@@ -98,5 +112,31 @@ def get_candidate(candidate_id):
 
     return (
         jsonify({"message": "Candidate retrieved successfully", "data": response_data}),
+        200,
+    )
+
+
+@application_bp.route("/api/jobs/<job_id>/candidates", methods=["GET"])
+@application_bp.route("/api/jobs/<job_id>/candidates/", methods=["GET"])
+def get_all_candidates(job_id):
+    parsed_job_id = _parse_job_id(job_id)
+    if parsed_job_id is None:
+        return jsonify({"error": "Invalid job id"}), 400
+
+    job = Job.query.get(parsed_job_id)
+    if not job:
+        return jsonify({"error": "Job not found"}), 404
+
+    candidates = Candidate.query.filter_by(job_id=parsed_job_id).all()
+    candidates_data = [candidate.to_dict() for candidate in candidates]
+    return (
+        jsonify(
+            {
+                "success": True,
+                "jobId": parsed_job_id,
+                "count": len(candidates_data),
+                "applicants": candidates_data,
+            }
+        ),
         200,
     )

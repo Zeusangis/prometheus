@@ -54,6 +54,12 @@ def resolve_recruiter_data(data):
     return load_default_recruiter_data()
 
 
+def _norm(value):
+    if value is None:
+        return ""
+    return str(value).strip().lower()
+
+
 def _parse_job_id(raw_job_id):
     """Support both numeric IDs (123) and prefixed IDs (job_123)."""
     if isinstance(raw_job_id, int):
@@ -130,6 +136,9 @@ def create_job_route():
 
 @jobs_bp.route("/api/jobs/<job_id>", methods=["GET"])
 def get_job(job_id):
+    if str(job_id).strip().lower() == "my-company":
+        return get_my_company_jobs()
+
     parsed_job_id = _parse_job_id(job_id)
     if parsed_job_id is None:
         return jsonify({"error": "Invalid job id"}), 400
@@ -139,6 +148,51 @@ def get_job(job_id):
         return jsonify({"error": "Job not found"}), 404
 
     return jsonify({"success": True, "job": job.to_dict()})
+
+
+@jobs_bp.route("/api/jobs/my-company", methods=["GET"])
+@jobs_bp.route("/api/jobs/my-company/", methods=["GET"])
+def get_my_company_jobs():
+    recruiter_data = load_default_recruiter_data() or {}
+    target_id = recruiter_data.get("id")
+    target_email = _norm(recruiter_data.get("email"))
+    target_name = _norm(recruiter_data.get("name"))
+    target_phone = _norm(recruiter_data.get("phone"))
+    target_company = _norm(recruiter_data.get("company"))
+
+    matched_jobs = []
+    for job in Job.query.all():
+        recruiter = job.recruiter_data or {}
+
+        id_match = target_id is not None and recruiter.get("id") == target_id
+        email_match = (
+            bool(target_email) and _norm(recruiter.get("email")) == target_email
+        )
+        name_match = bool(target_name) and _norm(recruiter.get("name")) == target_name
+        phone_match = (
+            bool(target_phone) and _norm(recruiter.get("phone")) == target_phone
+        )
+        company_match = (
+            bool(target_company) and _norm(recruiter.get("company")) == target_company
+        )
+
+        # Require recruiter identity match (id/email/name/phone), with company fallback.
+        if id_match or email_match or name_match or phone_match or company_match:
+            matched_jobs.append(job.to_dict())
+
+    return jsonify(
+        {
+            "success": True,
+            "recruiter": {
+                "id": target_id,
+                "name": recruiter_data.get("name"),
+                "email": recruiter_data.get("email"),
+                "phone": recruiter_data.get("phone"),
+                "company": recruiter_data.get("company"),
+            },
+            "jobs": matched_jobs,
+        }
+    )
 
 
 @jobs_bp.route("/api/jobs/<job_id>/applicants", methods=["GET"])
