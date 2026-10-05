@@ -341,9 +341,9 @@ export default function JobDetail() {
                     return (
                       <article
                         key={applicant.id}
-                        className="flex flex-col gap-4 rounded-3xl border border-border bg-card px-4 py-4 md:flex-row md:items-center"
+                        className="flex flex-col gap-4 rounded-3xl border border-border bg-card px-4 py-4 md:flex-row md:flex-wrap md:items-center"
                       >
-                        <div className="flex min-w-0 flex-1 items-center gap-4">
+                        <div className="flex min-w-0 flex-1 items-center gap-4 md:min-w-60">
                           <div className="grid h-12 w-12 place-items-center rounded-full bg-secondary text-sm font-semibold uppercase text-primary-dark">
                             {applicant.full_name
                               .split(" ")
