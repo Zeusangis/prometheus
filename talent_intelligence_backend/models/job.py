@@ -5,6 +5,8 @@ class Job(db.Model):
     __tablename__ = "jobs"
 
     id = db.Column(db.Integer, primary_key=True)
+    organization_id = db.Column(db.Integer, db.ForeignKey("organizations.id"), nullable=False, index=True)
+    created_by_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     title = db.Column(db.String(255), nullable=False)
     company = db.Column(db.String(255), nullable=False)
     location = db.Column(db.String(255), nullable=True)
@@ -28,6 +30,7 @@ class Job(db.Model):
         interview = self.interview_config or {}
         return {
             "id": self.id,
+            "organization_id": self.organization_id,
             "title": self.title,
             "company": self.company,
             "company_data": company_data,

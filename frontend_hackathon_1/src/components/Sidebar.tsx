@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Link, useLocation } from "@tanstack/react-router";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { logout } from "../api/auth";
+import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 
 const menuItems = [
   {
@@ -22,11 +24,7 @@ const menuItems = [
   { icon: "team", label: "Team", active: false, badge: null },
 ];
 
-const generalItems = [
-  { icon: "settings", label: "Settings" },
-  { icon: "help", label: "Help" },
-  { icon: "logout", label: "Logout" },
-];
+const generalItems = [{ icon: "logout", label: "Logout" }];
 
 const icons: Record<string, React.JSX.Element> = {
   grid: (
@@ -40,8 +38,7 @@ const icons: Record<string, React.JSX.Element> = {
         strokeLinecap="round"
         strokeLinejoin="round"
         strokeWidth={2}
-        d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a２ ２ 0 01２ ２v２a２ ２ 0 01-２ ２H６a２ ２ 
-0 01-２-２v-２zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+        d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
       />
     </svg>
   ),
@@ -176,6 +173,12 @@ const icons: Record<string, React.JSX.Element> = {
 export function Sidebar() {
   const [activeItem, setActiveItem] = useState("Dashboard");
   const location = useLocation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const signOut = useMutation({ mutationFn: logout, onSuccess: () => {
+    queryClient.clear();
+    navigate({ to: "/login" });
+  }});
 
   const routeActiveItem =
     location.pathname === "/dashboard/jobs"
@@ -216,7 +219,7 @@ export function Sidebar() {
           Menu
         </p>
         <ul className="space-y-1">
-          {menuItems.map((item) => (
+          {menuItems.filter((item) => item.to).map((item) => (
             <li key={item.label}>
               {item.to ? (
                 <Link
@@ -265,13 +268,14 @@ export function Sidebar() {
         <ul className="space-y-1">
           {generalItems.map((item) => (
             <li key={item.label}>
-              <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-muted hover:bg-primary-dark hover:text-white transition-all duration-200">
+              <button onClick={() => signOut.mutate()} disabled={signOut.isPending} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-muted hover:bg-primary-dark hover:text-white transition-all duration-200">
                 {icons[item.icon]}
                 <span className="font-medium">{item.label}</span>
               </button>
             </li>
           ))}
         </ul>
+        {signOut.error && <p role="alert" className="p-3 text-xs text-white">{signOut.error.message}</p>}
       </nav>
     </aside>
   );

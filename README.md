@@ -5,9 +5,9 @@ TrueHire is a technical recruiting application under remediation from a hackatho
 ## Current feature status
 
 - Implemented core: React job wizard, Flask job persistence/list/update, PDF application storage, Celery PDF extraction, applicant listing.
-- Being stabilized: public job/application flow, separate recruiting/processing states, recoverable enqueue failures, regression coverage.
-- **Not production-ready:** recruiter authentication, organization authorization, persisted ATS/GitHub AI analysis, real candidate/dashboard/interview screens, secure interview sessions and evaluation are still required. Existing demo screens are not evidence of functioning integrations.
-- `main1/`, referenced in the remediation plan, is absent from this checkout. Prototype migration requires obtaining those sources first.
+- Stabilized core: actual public job/application links, 5 MB PDF validation, separate recruiting/analysis states, recoverable enqueue failures, recruiter cookie authentication, organization-scoped reads/writes, and CSRF protection.
+- **Not production-ready:** persisted ATS/GitHub AI analysis, truthful candidate/dashboard/interview screens, secure interview sessions/evaluation, rate limiting and production storage are still required. Existing demo screens are not evidence of functioning integrations.
+- `main1/` is retained prototype source, now merged from upstream. Do not run its legacy Flask app or expose it publicly; its secret-returning interview implementation is not integrated into the main app.
 
 See [the engineering audit](docs/engineering-audit.md) for baseline failures and checkpoint status.
 
@@ -55,6 +55,8 @@ python3 -m venv venv
 source venv/bin/activate
 python -m pip install -r requirements.txt
 flask --app app db upgrade
+flask --app app create-recruiter --email recruiter@example.invalid --name "Your Name" --organization "Your Organization"
+# Enter a unique password (at least 12 characters) when prompted.
 flask --app app run --host=127.0.0.1 --port=5000
 ```
 
@@ -84,10 +86,30 @@ npm run typecheck
 npm run build
 ```
 
-Backend test/lint/CI commands and Compose orchestration will be documented when delivered, not before they exist. Database changes always use `flask --app app db upgrade`; do not delete existing databases or use `db.create_all()` to bypass migration history.
+```bash
+cd talent_intelligence_backend
+source venv/bin/activate
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+ruff check .
+flask --app app db check
+```
+
+GitHub Actions runs backend tests/lint/fresh migrations and frontend install/typecheck/build without provider keys. Hosted CI results must be checked separately; local passes are not a hosted-CI claim. Compose orchestration is still pending. Database changes always use `flask --app app db upgrade`; do not delete existing databases or use `db.create_all()` to bypass migration history.
+
+### Existing data ownership
+
+Migration `b730cce208a1` preserves old jobs/applicants under an **Unclaimed legacy data** organization with no memberships. No recruiter automatically receives access based on old JSON or company names. A trusted local operator must explicitly assign each legacy job after checking ownership:
+
+```bash
+flask --app app assign-legacy-job --job-id 123 --organization-id 2
+# Review and confirm the prompt. Do not assign data you do not own.
+```
+
+New jobs always belong to the signed-in organization. The old `my-company` route remains a scoped compatibility alias, not a static recruiter lookup.
 
 ## Security and deployment boundaries
 
-Do not deploy this checkpoint with real candidate data: recruiter APIs are still unauthenticated/unscoped. Static recruiter identity and demo UI remain pending replacement. Restricted CORS alone is not authorization. Uploads use local storage for development; production needs controlled object storage, retention/deletion policy, and access control. PDF type checks are not malware scanning. AI scores must remain decision support.
+Recruiter APIs require an active hashed-password account, an organization membership, and a CSRF header for mutations. Sessions use HTTP-only SameSite cookies (Secure in production), expire after eight hours, and are revoked on logout. Credentials are never stored in localStorage; CSRF values stay in memory. Use same-origin deployment; separate-origin browser login is intentionally unsupported. Static recruiter JSON has been removed. Do not deploy with real candidate data until the remaining privacy/rate-limit/provider/storage work is complete. Uploads use local storage for development; production needs controlled object storage, retention/deletion policy, and access control. PDF type checks are not malware scanning. AI scores must remain decision support.
 
 No license decision, repository metadata update, remote push, or deployment is included in remediation without an explicit request.

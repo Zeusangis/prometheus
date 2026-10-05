@@ -7,6 +7,9 @@ from config import configure_app
 from models import db
 from utils.celery_setup import celery_init_app
 from utils.api_errors import register_error_handlers
+from utils.commands import register_commands
+from services.auth import register_auth_guard
+from routes.auth_routes import auth_bp
 
 from routes.github_routes import github_bp
 from routes.job_routes import jobs_bp
@@ -28,6 +31,9 @@ def create_app(config_overrides=None):
 
     celery_init_app(app)
     register_error_handlers(app)
+    register_auth_guard(app)
+    register_commands(app)
+    app.register_blueprint(auth_bp)
 
     @app.get("/api/health")
     def health():

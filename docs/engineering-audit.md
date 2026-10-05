@@ -10,7 +10,7 @@ Branch: `main`. Existing changes are owned by the user and must be preserved:
 - `talent_intelligence_backend/routes/application_routes.py` (candidate GET endpoint)
 - untracked `.freebuff/` metadata
 
-No commits, staging, database resets, repository renames, or provider calls were performed.
+During the Phase 0 baseline, no commits, staging, database resets, repository renames, or provider calls were performed. The user subsequently authorized periodic commits/pushes and inclusion of the related pre-existing edits.
 
 ### Baseline checks
 
@@ -55,6 +55,27 @@ Work in independently verified checkpoints, preserving the React wizard, Flask b
 - core tests and fresh/legacy migration tests require no provider credentials.
 - CI runs backend lint/tests/migrations and frontend npm/typecheck/build.
 
+## Verified phases 1–3 checkpoint
+
+- Configuration/build baseline committed as `4a3f647`; initial push rejected because remote main contained a newer commit. No force push was attempted.
+- Remote commit `19eeec9` adds only `main1/`; the shared checkout merged it as `578c6fd` after workflow `2409e1d` and layout `a1bc7ea` checkpoints. Remote main was verified at `578c6fd`; no force push or duplicate commits were made. The prototype-source blocker is resolved.
+- 67 pytest cases pass without provider credentials, including the full transition matrix, upload bounds/signature checks, broker failure/retry, parser failure recovery, fresh schema drift, and legacy migration downgrade/reupgrade.
+- Ruff, `npm ci`, frontend typecheck/build, and fresh-database migration upgrade/check pass.
+- Browser profile initialization was resolved by using the default profile. The job wizard generated the correct `/apply/1` link; the incognito application page loaded the real job; browser submission returned success during a real broker outage. That browser upload used a PDF-signature fixture, not a parseable resume. Separately, an actual valid blank PDF was submitted over HTTP through the Vite proxy and persisted with `enqueue_failed` during the real outage.
+- Browser recruiter stage confirmation successfully moved screening -> interview_scheduled, and pipeline counts updated from 1/0 to 0/1 while analysis remained enqueue_failed.
+- CI workflow is added but hosted GitHub Actions results must be checked after a successful push; local checks alone are not a hosted-CI pass.
+- No Postgres migration/runtime test or real provider call has been performed. PyPDF2 and existing migration-engine access emit deprecation warnings.
+
+## Phase 4 checkpoint
+
+- Added User/Organization/Membership with hashed passwords, active-account checks, eight-hour HTTP-only sessions, production Secure cookies, pre-login/mutation CSRF, and logout revocation.
+- All recruiter reads/writes now query by organization in SQL, including compatibility aliases and candidate retry/stage routes. Public job/application endpoints remain unauthenticated and exclude sensitive recruiter fields.
+- Migration `b730cce208a1` quarantines legacy jobs in an unclaimed organization without memberships; explicit operator CLI assignment is tested. The static recruiter file is removed.
+- React login/session gate, real header identity, and logout are API-backed. Fake header notifications/search and unimplemented navigation are removed.
+- Final verification: 75 pytest cases, Ruff, frontend typecheck/build, fresh schema check and legacy ownership migration tests pass. Browser redirect, cookie login, authenticated identity display, and logout pass against an isolated migrated SQLite database.
+- One test initially failed because login fixtures made a request before a test registered its error route; it was repaired by replacing an existing view, with the same secret-leak assertions retained. No checks were skipped.
+- Still unverified: PostgreSQL runtime, hosted CI status, actual provider integrations. Rate limiting and the legacy prototype's insecure endpoints remain pending; `main1` must not be run publicly.
+
 ## Subsequent required work
 
-Authentication + organization ownership/CSRF must precede deployment; analysis/retry/stage endpoints in the initial checkpoint are still development-only. Persistent analyses and migrated providers, truthful candidate/interview/dashboard screens, secure interview sessions, privacy/rate limits/storage/audit, Compose, and final end-to-end scenario remain required. Do not treat a green initial CI checkpoint as product completion.
+Authentication + organization ownership/CSRF are implemented in Phase 4; deployment remains blocked on remaining privacy/rate-limit/provider/storage work. Persistent analyses and migrated providers, truthful candidate/interview/dashboard screens, secure interview sessions, privacy/rate limits/storage/audit, Compose, and final end-to-end scenario remain required. Do not treat a green initial CI checkpoint as product completion.

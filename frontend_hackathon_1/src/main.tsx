@@ -6,8 +6,10 @@ import {
   createRouter,
   RouterProvider,
   Outlet,
+  useLocation,
+  Navigate,
 } from "@tanstack/react-router";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import NewJob from "./pages/NewJob";
 import Dashboard from "./pages/dashboard/Dashboard";
 import JobsPage from "./pages/dashboard/JobsPage";
@@ -17,6 +19,8 @@ import ProfilePage from "./pages/dashboard/ProfilePage";
 import InterviewSummaryPage from "./pages/dashboard/InterviewSummaryPage";
 import ApplyPage from "./pages/apply/ApplyPage";
 import "./index.css";
+import LoginPage from "./pages/LoginPage";
+import { authMe } from "./api/auth";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,12 +31,27 @@ const queryClient = new QueryClient({
 function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <SessionGate />
     </QueryClientProvider>
   );
 }
 
+function SessionGate() {
+  const location = useLocation();
+  const publicPage = location.pathname.startsWith("/apply/") || location.pathname === "/login";
+  const { data: identity, isLoading, error } = useQuery({
+    queryKey: ["auth-me"], queryFn: authMe, enabled: !publicPage, retry: false,
+    staleTime: 0, refetchOnWindowFocus: true,
+  });
+  if (publicPage) return <Outlet />;
+  if (isLoading) return <p className="p-8">Loading recruiter session…</p>;
+  if (error) return <p role="alert" className="p-8">Session unavailable. Please refresh.</p>;
+  if (!identity) return <Navigate to="/login" />;
+  return <Outlet />;
+}
+
 const rootRoute = createRootRoute({ component: RootLayout });
+const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: "/login", component: LoginPage });
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -89,6 +108,7 @@ const newJobRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
+  loginRoute,
   indexRoute,
   dashboardRoute,
   jobsRoute,

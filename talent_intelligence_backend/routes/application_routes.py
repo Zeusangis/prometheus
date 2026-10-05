@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 
 from models import Candidate, Job, MeetingSummary, db
 from services.analysis_queue import enqueue_analysis
+from services.auth import owned_candidate
 from services.candidate_stage import InvalidTransition, transition_candidate
 from utils.api_errors import api_error
 
@@ -125,7 +126,7 @@ def move_to_next_step(candidate_id, job_id=None):
     next_status = payload.get("stage") or payload.get("next_status") or payload.get("status")
     if not isinstance(next_status, str):
         return api_error("stage_required", "A target stage is required.", 400)
-    candidate = db.session.get(Candidate, candidate_id)
+    candidate = owned_candidate(candidate_id)
     if not candidate:
         return api_error("candidate_not_found", "Candidate not found.", 404)
     if effective_job_id is not None and candidate.job_id != effective_job_id:
@@ -153,7 +154,7 @@ def move_to_next_step(candidate_id, job_id=None):
 
 @application_bp.route("/api/candidates/<int:candidate_id>", methods=["GET"])
 def get_candidate(candidate_id):
-    candidate = db.session.get(Candidate, candidate_id)
+    candidate = owned_candidate(candidate_id)
     if not candidate:
         return api_error("candidate_not_found", "Candidate not found.", 404)
     return jsonify({"success": True, "candidate": candidate.to_dict()}), 200
@@ -161,7 +162,7 @@ def get_candidate(candidate_id):
 
 @application_bp.post("/api/candidates/<int:candidate_id>/analysis/retry")
 def retry_analysis(candidate_id):
-    candidate = db.session.get(Candidate, candidate_id)
+    candidate = owned_candidate(candidate_id)
     if not candidate:
         return api_error("candidate_not_found", "Candidate not found.", 404)
     if candidate.analysis_status not in {"failed", "enqueue_failed", "partial"}:

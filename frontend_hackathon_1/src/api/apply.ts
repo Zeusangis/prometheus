@@ -1,4 +1,5 @@
 import { apiErrorMessage } from "./errors";
+import { recruiterFetch } from "./auth";
 
 type JobInfo = {
   id: string;
@@ -108,7 +109,7 @@ export async function submitApplication(
 export async function getCandidateProfile(
   candidateId: number | string,
 ): Promise<CandidateProfile> {
-  const response = await fetch(`${API_BASE_URL}/api/candidates/${candidateId}`);
+  const response = await recruiterFetch(`${API_BASE_URL}/api/candidates/${candidateId}`);
 
   if (!response.ok) {
     throw new Error("Failed to load candidate profile");

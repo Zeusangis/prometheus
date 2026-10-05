@@ -56,11 +56,12 @@ def test_health_and_cors(client):
     assert response.headers["Access-Control-Allow-Origin"] == "http://localhost:5173"
 
 
-def test_internal_errors_are_safe(app, client):
-    @app.get("/api/test-error")
+def test_internal_errors_are_safe(app, client, monkeypatch):
     def explode():
         raise RuntimeError("provider-secret /private/database/path traceback")
-    response = client.get("/api/test-error")
+    # Replace an existing view; authenticated fixtures already made requests.
+    monkeypatch.setitem(app.view_functions, "jobs.list_jobs", explode)
+    response = client.get("/api/jobs")
     assert response.status_code == 500
     assert response.json["error"]["code"] == "internal_error"
     assert "request_id" in response.json["error"]

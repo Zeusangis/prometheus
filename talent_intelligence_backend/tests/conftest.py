@@ -11,10 +11,11 @@ os.environ["CELERY_RESULT_BACKEND"] = "cache+memory://"
 
 import pytest
 from flask_migrate import upgrade
+from flask.testing import FlaskClient
 from PyPDF2 import PdfWriter
 
 from app import create_app
-from models import db
+from models import Organization, OrganizationMembership, User, db
 from services.analysis_queue import process_resume_task
 
 MIGRATIONS = str(Path(__file__).resolve().parents[1] / "migrations")
@@ -31,15 +32,39 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setattr(process_resume_task, "delay", lambda *_: SimpleNamespace(id="test-task"))
     with application.app_context():
         upgrade(directory=MIGRATIONS)
+        user = User(email="recruiter@example.invalid", name="Test Recruiter")
+        user.set_password("test-password-long-enough")
+        org = Organization(name="Example Test Organization")
+        db.session.add_all([user, org])
+        db.session.flush()
+        db.session.add(OrganizationMembership(user_id=user.id, organization_id=org.id, role="owner"))
+        db.session.commit()
     yield application
     with application.app_context():
         db.session.remove()
         db.engine.dispose()
 
 
+class RecruiterClient(FlaskClient):
+    def open(self, *args, **kwargs):
+        # Test browser-like header injection; auth/CSRF guard remains enabled.
+        if kwargs.get("method", "GET") not in {"GET", "HEAD", "OPTIONS"}:
+            with self.session_transaction() as stored:
+                token = stored.get("csrf_token")
+            if token:
+                kwargs.setdefault("headers", {}).setdefault("X-CSRF-Token", token)
+        return super().open(*args, **kwargs)
+
+
 @pytest.fixture
 def client(app):
-    return app.test_client()
+    client = RecruiterClient(app, app.response_class)
+    client.get("/api/auth/csrf")
+    response = client.post("/api/auth/login", json={
+        "email": "recruiter@example.invalid", "password": "test-password-long-enough",
+    })
+    assert response.status_code == 200, response.json
+    return client
 
 
 @pytest.fixture

@@ -1,5 +1,6 @@
 import { recordJobSubmission } from "./jobSubmissionLog";
 import { apiErrorMessage } from "./errors";
+import { recruiterFetch } from "./auth";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
@@ -119,7 +120,7 @@ export async function moveCandidateToNextStep(params: {
     throw new Error("Invalid job id");
   }
 
-  const response = await fetch(
+  const response = await recruiterFetch(
     `${API_BASE_URL}/api/jobs/${parsedJobId}/candidates/${params.candidateId}/next-step`,
     {
       method: "POST",
@@ -158,7 +159,7 @@ export async function moveCandidateToNextStep(params: {
 
 export async function getJobById(jobId: string): Promise<JobDetail> {
   const normalizedJobId = normalizeJobId(jobId);
-  const response = await fetch(`${API_BASE_URL}/api/jobs/${normalizedJobId}`);
+  const response = await recruiterFetch(`${API_BASE_URL}/api/jobs/${normalizedJobId}`);
   const payload = (await response
     .json()
     .catch(() => ({}))) as Partial<JobDetailResponse> & {
@@ -178,7 +179,7 @@ export async function getJobById(jobId: string): Promise<JobDetail> {
 
 export async function getJobApplicants(jobId: string): Promise<JobApplicant[]> {
   const normalizedJobId = normalizeJobId(jobId);
-  const response = await fetch(
+  const response = await recruiterFetch(
     `${API_BASE_URL}/api/jobs/${normalizedJobId}/applicants`,
   );
   const payload = (await response
@@ -195,7 +196,7 @@ export async function getJobApplicants(jobId: string): Promise<JobApplicant[]> {
 }
 
 export async function getCompanyJobs(): Promise<CompanyJob[]> {
-  const response = await fetch(`${API_BASE_URL}/api/jobs/my-company`);
+  const response = await recruiterFetch(`${API_BASE_URL}/api/jobs`);
   const payload = (await response
     .json()
     .catch(() => ({}))) as Partial<CompanyJobsResponse> & {
@@ -213,7 +214,7 @@ export async function getTotalJobs(): Promise<number> {
   const endpoints = ["/api/jobs/total", "/api/jobs/count"];
 
   for (const endpoint of endpoints) {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`);
+    const response = await recruiterFetch(`${API_BASE_URL}${endpoint}`);
     const payload = (await response
       .json()
       .catch(() => ({}))) as Partial<TotalJobsResponse> & {
@@ -235,7 +236,7 @@ export async function getTotalJobs(): Promise<number> {
 }
 
 export async function createJob(job: NewJobInput): Promise<CreatedJob> {
-  const response = await fetch(`${API_BASE_URL}/api/jobs`, {
+  const response = await recruiterFetch(`${API_BASE_URL}/api/jobs`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
