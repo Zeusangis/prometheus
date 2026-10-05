@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Portfolio Review</title>
+  <style>
+    :root{
+      --bg:#07111f;
+      --bg2:#0d1728;
+      --panel:rgba(255,255,255,0.08);
+      --line:rgba(255,255,255,0.12);
+      --text:#f5f7fb;
+      --muted:#aeb8d0;
+      --blue:#73a7ff;
+      --cyan:#5de4ff;
+      --green:#38d39f;
+      --shadow:0 20px 50px rgba(0,0,0,0.35);
+      --radius:24px;
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(115,167,255,0.18), transparent 30%),
+        radial-gradient(circle at top right, rgba(93,228,255,0.10), transparent 25%),
+        linear-gradient(160deg, #06101d 0%, #0b1523 45%, #0f1d34 100%);
+      min-height:100vh;
+    }
+
+    .page{
+      width:min(1100px, 92%);
+      margin:0 auto;
+      min-height:100vh;
+      display:grid;
+      place-items:center;
+      padding:40px 0;
+    }
+
+    .shell{
+      width:100%;
+      display:grid;
+      grid-template-columns: 1.05fr 0.95fr;
+      gap:28px;
+      align-items:stretch;
+    }
+
+    .hero, .form-card{
+      background:var(--panel);
+      border:1px solid var(--line);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+    }
+
+    .hero{
+      padding:36px;
+      position:relative;
+      overflow:hidden;
+    }
+
+    .hero::after{
+      content:"";
+      position:absolute;
+      width:300px;
+      height:300px;
+      right:-90px;
+      top:-90px;
+      background:radial-gradient(circle, rgba(115,167,255,0.25), transparent 70%);
+      filter:blur(10px);
+    }
+
+    .tag{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 14px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,0.16);
+      color:#dce6fb;
+      font-size:13px;
+      margin-bottom:18px;
+      background:rgba(255,255,255,0.05);
+    }
+
+    h1{
+      font-size: clamp(2rem, 4vw, 3.6rem);
+      line-height:1.05;
+      margin:0 0 16px;
+      letter-spacing:-0.03em;
+    }
+
+    .sub{
+      color:var(--muted);
+      font-size:1.04rem;
+      line-height:1.7;
+      max-width:620px;
+      margin-bottom:26px;
+    }
+
+    .feature-list{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:14px;
+      margin-top:24px;
+    }
+
+    .feature{
+      padding:16px;
+      border-radius:18px;
+      background:rgba(255,255,255,0.05);
+      border:1px solid rgba(255,255,255,0.08);
+    }
+
+    .feature strong{
+      display:block;
+      margin-bottom:6px;
+      font-size:0.98rem;
+    }
+
+    .feature span{
+      color:var(--muted);
+      font-size:0.92rem;
+      line-height:1.5;
+    }
+
+    .form-card{
+      padding:28px;
+      align-self:center;
+    }
+
+    .form-title{
+      margin:0 0 8px;
+      font-size:1.6rem;
+    }
+
+    .form-sub{
+      margin:0 0 24px;
+      color:var(--muted);
+      line-height:1.6;
+    }
+
+    form{
+      display:grid;
+      gap:16px;
+    }
+
+    .field{
+      display:grid;
+      gap:8px;
+    }
+
+    label{
+      font-size:0.92rem;
+      color:#dce6fb;
+      font-weight:600;
+    }
+
+    input[type="text"],
+    input[type="file"]{
+      width:100%;
+      padding:14px 16px;
+      border-radius:16px;
+      border:1px solid rgba(255,255,255,0.10);
+      background:rgba(255,255,255,0.05);
+      color:var(--text);
+      outline:none;
+      transition:0.25s ease;
+      font-size:0.96rem;
+    }
+
+    input:focus{
+      border-color:rgba(115,167,255,0.7);
+      box-shadow:0 0 0 4px rgba(115,167,255,0.12);
+      transform:translateY(-1px);
+    }
+
+    .grid-2{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:14px;
+    }
+
+    .btn{
+      border:none;
+      padding:15px 18px;
+      border-radius:16px;
+      font-size:0.98rem;
+      font-weight:700;
+      color:white;
+      cursor:pointer;
+      background:linear-gradient(135deg, var(--blue), var(--cyan));
+      box-shadow:0 14px 30px rgba(60,130,246,0.28);
+      transition:0.25s ease;
+    }
+
+    .btn:hover{
+      transform:translateY(-2px);
+      filter:brightness(1.04);
+    }
+
+    .btn:disabled{
+      opacity:0.7;
+      cursor:not-allowed;
+      transform:none;
+    }
+
+    .note{
+      font-size:0.86rem;
+      color:var(--muted);
+      line-height:1.5;
+      margin-top:4px;
+    }
+
+    .loading{
+      display:none;
+      margin-top:14px;
+      color:#dbe7ff;
+      font-size:0.92rem;
+    }
+
+    .spinner{
+      width:16px;
+      height:16px;
+      border:2px solid rgba(255,255,255,0.2);
+      border-top-color:white;
+      border-radius:50%;
+      display:inline-block;
+      vertical-align:middle;
+      margin-right:8px;
+      animation:spin 0.8s linear infinite;
+    }
+
+    @keyframes spin{
+      to{transform:rotate(360deg)}
+    }
+
+    @media (max-width: 960px){
+      .shell{
+        grid-template-columns:1fr;
+      }
+      .feature-list{
+        grid-template-columns:1fr;
+      }
+      .grid-2{
+        grid-template-columns:1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="shell">
+      <section class="hero">
+        <div class="tag">AI Resume + GitHub Review</div>
+        <h1>See how your resume and GitHub profile perform together.</h1>
+        <p class="sub">
+          Upload your resume, add your GitHub username, and choose two favorite projects.
+          You’ll get a polished dashboard with ATS insights, GitHub signals, project summaries,
+          and a final hiring-style evaluation.
+        </p>
+
+        <div class="feature-list">
+          <div class="feature">
+            <strong>Resume scoring</strong>
+            <span>ATS score, breakdown, missing keywords, improvement suggestions, and verdict.</span>
+          </div>
+          <div class="feature">
+            <strong>GitHub summary</strong>
+            <span>Profile metrics, stars, commits, project analysis, and code strengths.</span>
+          </div>
+          <div class="feature">
+            <strong>Project spotlight</strong>
+            <span>Your two chosen repos get special attention in the dashboard.</span>
+          </div>
+          <div class="feature">
+            <strong>Modern UX</strong>
+            <span>Clean, premium interface that feels like a polished product demo.</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="form-card">
+        <h2 class="form-title">Start analysis</h2>
+        <p class="form-sub">Fill in your details below and generate your portfolio dashboard.</p>
+
+        <form id="reviewForm" action="/portfolio-review/result" method="POST" enctype="multipart/form-data">
+          <div class="field">
+            <label for="resume">Upload resume</label>
+            <input type="file" id="resume" name="resume" accept=".pdf,.doc,.docx" required />
+          </div>
+
+          <div class="field">
+            <label for="username">GitHub username</label>
+            <input type="text" id="username" name="username" placeholder="GitHub username" required />
+          </div>
+
+          <div class="grid-2">
+            <div class="field">
+              <label for="project1">Favorite project 1</label>
+              <input type="text" id="project1" name="project1" placeholder="Project 1" required />
+            </div>
+
+            <div class="field">
+              <label for="project2">Favorite project 2</label>
+              <input type="text" id="project2" name="project2" placeholder="Project 2" required />
+            </div>
+          </div>
+
+          <button type="submit" class="btn" id="submitBtn">Generate Dashboard</button>
+          <div class="loading" id="loadingBox">
+            <span class="spinner"></span>
+            Analyzing resume and GitHub profile...
+          </div>
+          <div class="note">
+            Make sure your existing endpoints <strong>/analyze-resume</strong> and
+            <strong>/analyze-github/&lt;username&gt;/&lt;project1&gt;/&lt;project2&gt;</strong> are running.
+          </div>
+        </form>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById("reviewForm");
+    const submitBtn = document.getElementById("submitBtn");
+    const loadingBox = document.getElementById("loadingBox");
+
+    form.addEventListener("submit", function () {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Processing...";
+      loadingBox.style.display = "block";
+    });
+  </script>
+</body>
+</html>

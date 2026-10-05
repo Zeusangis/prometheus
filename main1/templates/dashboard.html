@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Portfolio Dashboard</title>
+  <style>
+    :root{
+      --bg:#07111f;
+      --panel:rgba(255,255,255,0.08);
+      --line:rgba(255,255,255,0.12);
+      --text:#f5f7fb;
+      --muted:#aeb8d0;
+      --blue:#73a7ff;
+      --cyan:#5de4ff;
+      --green:#38d39f;
+      --yellow:#f6c760;
+      --red:#ff6b81;
+      --purple:#9b7bff;
+      --shadow:0 20px 50px rgba(0,0,0,0.35);
+      --radius:24px;
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(115,167,255,0.18), transparent 30%),
+        radial-gradient(circle at top right, rgba(93,228,255,0.10), transparent 25%),
+        linear-gradient(160deg, #06101d 0%, #0b1523 45%, #0f1d34 100%);
+      min-height:100vh;
+    }
+
+    .page{
+      width:min(1400px, 94%);
+      margin:0 auto;
+      padding:28px 0 50px;
+    }
+
+    .topbar{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap:16px;
+      margin-bottom:24px;
+      flex-wrap:wrap;
+    }
+
+    .title-wrap h1{
+      margin:0 0 8px;
+      font-size:2.2rem;
+      letter-spacing:-0.03em;
+    }
+
+    .title-wrap p{
+      margin:0;
+      color:var(--muted);
+      line-height:1.6;
+    }
+
+    .back-btn{
+      text-decoration:none;
+      color:white;
+      padding:12px 16px;
+      border-radius:14px;
+      background:rgba(255,255,255,0.08);
+      border:1px solid rgba(255,255,255,0.12);
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns:repeat(12,1fr);
+      gap:20px;
+    }
+
+    .card{
+      background:var(--panel);
+      border:1px solid var(--line);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:22px;
+    }
+
+    .span-3{grid-column:span 3}
+    .span-4{grid-column:span 4}
+    .span-5{grid-column:span 5}
+    .span-6{grid-column:span 6}
+    .span-7{grid-column:span 7}
+    .span-8{grid-column:span 8}
+    .span-12{grid-column:span 12}
+
+    .label{
+      color:var(--muted);
+      font-size:0.85rem;
+      margin-bottom:8px;
+      text-transform:uppercase;
+      letter-spacing:0.08em;
+    }
+
+    .value{
+      font-size:2rem;
+      font-weight:800;
+      margin:0;
+    }
+
+    .sub{
+      color:var(--muted);
+      margin-top:8px;
+      line-height:1.6;
+    }
+
+    .score-ring{
+      width:150px;
+      height:150px;
+      margin:8px auto 14px;
+      border-radius:50%;
+      display:grid;
+      place-items:center;
+      background:conic-gradient(var(--blue) calc(var(--score)*1%), rgba(255,255,255,0.08) 0);
+      position:relative;
+    }
+
+    .score-ring::before{
+      content:"";
+      position:absolute;
+      inset:14px;
+      background:#0e182b;
+      border-radius:50%;
+      border:1px solid rgba(255,255,255,0.08);
+    }
+
+    .score-ring .inner{
+      position:relative;
+      z-index:1;
+      text-align:center;
+    }
+
+    .score-ring .big{
+      font-size:2rem;
+      font-weight:800;
+    }
+
+    .score-ring .small{
+      font-size:0.8rem;
+      color:var(--muted);
+      margin-top:2px;
+    }
+
+    .meter{
+      margin:14px 0;
+    }
+
+    .meter-head{
+      display:flex;
+      justify-content:space-between;
+      margin-bottom:8px;
+      color:#dbe7ff;
+      font-size:0.92rem;
+    }
+
+    .track{
+      width:100%;
+      height:10px;
+      border-radius:999px;
+      background:rgba(255,255,255,0.08);
+      overflow:hidden;
+    }
+
+    .fill{
+      height:100%;
+      border-radius:999px;
+      background:linear-gradient(90deg, var(--blue), var(--cyan));
+      width:0%;
+    }
+
+    .chips{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      margin-top:14px;
+    }
+
+    .chip{
+      padding:10px 14px;
+      border-radius:999px;
+      background:rgba(255,255,255,0.06);
+      border:1px solid rgba(255,255,255,0.08);
+      color:#e7eefc;
+      font-size:0.9rem;
+    }
+
+    .list{
+      display:grid;
+      gap:12px;
+      margin-top:12px;
+    }
+
+    .list-item{
+      padding:14px 16px;
+      border-radius:16px;
+      background:rgba(255,255,255,0.05);
+      border:1px solid rgba(255,255,255,0.08);
+      line-height:1.6;
+      color:#e9effd;
+    }
+
+    .project-card{
+      padding:18px;
+      border-radius:18px;
+      background:rgba(255,255,255,0.05);
+      border:1px solid rgba(255,255,255,0.08);
+      margin-top:14px;
+    }
+
+    .project-head{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:16px;
+      flex-wrap:wrap;
+      margin-bottom:10px;
+    }
+
+    .project-name{
+      font-size:1.08rem;
+      font-weight:700;
+      margin:0;
+    }
+
+    .project-meta{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+
+    .mini{
+      font-size:0.82rem;
+      padding:7px 10px;
+      border-radius:999px;
+      background:rgba(115,167,255,0.14);
+      color:#dce8ff;
+      border:1px solid rgba(115,167,255,0.22);
+    }
+
+    .section-title{
+      margin:0 0 12px;
+      font-size:1.2rem;
+    }
+
+    .muted{
+      color:var(--muted);
+    }
+
+    @media (max-width: 1100px){
+      .span-3,.span-4,.span-5,.span-6,.span-7,.span-8{grid-column:span 12}
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="topbar">
+      <div class="title-wrap">
+        <h1>Portfolio Intelligence Dashboard</h1>
+        <p>Resume and GitHub analysis for <strong>{{ username }}</strong> using projects <strong>{{ project1 }}</strong> and <strong>{{ project2 }}</strong>.</p>
+      </div>
+      <a class="back-btn" href="/portfolio-review">← New Review</a>
+    </div>
+
+    <div class="grid">
+      <div class="card span-4">
+        <div class="label">ATS Score</div>
+        <div class="score-ring" style="--score: {{ resume_data.ats_score or 0 }}">
+          <div class="inner">
+            <div class="big">{{ resume_data.ats_score or 0 }}</div>
+            <div class="small">out of 100</div>
+          </div>
+        </div>
+        <p class="sub">{{ resume_data.final_verdict or "No verdict available." }}</p>
+      </div>
+
+      <div class="card span-4">
+        <div class="label">GitHub Profile</div>
+        <div class="score-ring" style="--score: {{ (github_data.commit_star.total_stars or 0) if github_data.commit_star else 0 }}">
+          <div class="inner">
+            <div class="big">{{ github_data.commit_star.total_stars or 0 }}</div>
+            <div class="small">total stars</div>
+          </div>
+        </div>
+        <div class="chips" style="justify-content:center;">
+          <div class="chip">🧠 {{ github_data.commit_star.total_commits or 0 }} commits</div>
+          <div class="chip">📦 {{ github_data.commit_star.total_repos or 0 }} repos</div>
+        </div>
+        <p class="sub">
+          GitHub analysis for <strong>{{ github_data.top_level_signals.username or username }}</strong>
+          based on repository activity and selected projects.
+        </p>
+      </div>
+
+      <div class="card span-4">
+        <div class="label">GitHub Snapshot</div>
+        <p class="value">{{ github_data.top_level_signals.public_repo_count or 0 }}</p>
+        <div class="sub">Public repositories</div>
+
+        <div class="chips">
+          <div class="chip">⭐ {{ github_data.commit_star.total_stars or 0 }} total stars</div>
+          <div class="chip">🧠 {{ github_data.commit_star.total_commits or 0 }} commits</div>
+          <div class="chip">👥 {{ github_data.top_level_signals.followers or 0 }} followers</div>
+          <div class="chip">🏢 {{ github_data.top_level_signals.company or "N/A" }}</div>
+        </div>
+      </div>
+
+      <div class="card span-6">
+        <h3 class="section-title">ATS Breakdown</h3>
+
+        <div class="meter">
+          <div class="meter-head"><span>Keyword Match</span><span>{{ resume_data.breakdown.keyword_match or 0 }}/25</span></div>
+          <div class="track"><div class="fill" style="width: {{ ((resume_data.breakdown.keyword_match or 0) / 25) * 100 }}%"></div></div>
+        </div>
+
+        <div class="meter">
+          <div class="meter-head"><span>Skills Alignment</span><span>{{ resume_data.breakdown.skills_alignment or 0 }}/15</span></div>
+          <div class="track"><div class="fill" style="width: {{ ((resume_data.breakdown.skills_alignment or 0) / 15) * 100 }}%"></div></div>
+        </div>
+
+        <div class="meter">
+          <div class="meter-head"><span>Experience Relevance</span><span>{{ resume_data.breakdown.experience_relevance or 0 }}/20</span></div>
+          <div class="track"><div class="fill" style="width: {{ ((resume_data.breakdown.experience_relevance or 0) / 20) * 100 }}%"></div></div>
+        </div>
+
+        <div class="meter">
+          <div class="meter-head"><span>Education</span><span>{{ resume_data.breakdown.education or 0 }}/10</span></div>
+          <div class="track"><div class="fill" style="width: {{ ((resume_data.breakdown.education or 0) / 10) * 100 }}%"></div></div>
+        </div>
+
+        <div class="meter">
+          <div class="meter-head"><span>Formatting</span><span>{{ resume_data.breakdown.formatting or 0 }}/10</span></div>
+          <div class="track"><div class="fill" style="width: {{ ((resume_data.breakdown.formatting or 0) / 10) * 100 }}%"></div></div>
+        </div>
+
+        <div class="meter">
+          <div class="meter-head"><span>Achievements</span><span>{{ resume_data.breakdown.achievements or 0 }}/10</span></div>
+          <div class="track"><div class="fill" style="width: {{ ((resume_data.breakdown.achievements or 0) / 10) * 100 }}%"></div></div>
+        </div>
+
+        <div class="meter">
+          <div class="meter-head"><span>Completeness</span><span>{{ resume_data.breakdown.completeness or 0 }}/10</span></div>
+          <div class="track"><div class="fill" style="width: {{ ((resume_data.breakdown.completeness or 0) / 10) * 100 }}%"></div></div>
+        </div>
+      </div>
+
+      <div class="card span-6">
+        <h3 class="section-title">Missing Keywords</h3>
+        <div class="chips">
+          {% for keyword in resume_data.missing_keywords or [] %}
+            <div class="chip">{{ keyword }}</div>
+          {% endfor %}
+        </div>
+
+        <h3 class="section-title" style="margin-top:24px;">Resume Projects</h3>
+        <div class="list">
+          {% for project in resume_data.projects or [] %}
+            <div class="list-item">{{ project }}</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card span-6">
+        <h3 class="section-title">Top Improvements</h3>
+        <div class="list">
+          {% for item in resume_data.top_improvements or [] %}
+            <div class="list-item">{{ item }}</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card span-6">
+        <h3 class="section-title">Weak Areas</h3>
+        <div class="list">
+          {% for item in resume_data.weak_areas or [] %}
+            <div class="list-item">{{ item }}</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card span-12">
+        <h3 class="section-title">Favorite Project Analysis</h3>
+
+        {% set pc = github_data.commit_star.project_check or {} %}
+
+        {% for key, value in pc.items() %}
+          <div class="project-card">
+            <div class="project-head">
+              <div>
+                <p class="project-name">{{ key }}</p>
+                <div class="muted" style="margin-top:6px;">
+                  {% if value.exists %}
+                    Project found and analyzed.
+                  {% else %}
+                    Project not found.
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="project-meta">
+                <div class="mini">⭐ {{ value.stars or 0 }} stars</div>
+                <div class="mini">🧠 {{ value.commits or 0 }} commits</div>
+                <div class="mini">Score {{ value.gemini_claims.score if value.gemini_claims else "N/A" }}/10</div>
+              </div>
+            </div>
+
+            <p class="sub">{{ value.gemini_claims.summary if value.gemini_claims else "No project summary available." }}</p>
+
+            <div class="grid" style="margin-top:14px;">
+              <div class="span-6" style="grid-column:span 6;">
+                <div class="label">Strengths</div>
+                <div class="list">
+                  {% if value.gemini_claims and value.gemini_claims.strengths %}
+                    {% for s in value.gemini_claims.strengths %}
+                      <div class="list-item">{{ s }}</div>
+                    {% endfor %}
+                  {% else %}
+                    <div class="list-item">No strengths available.</div>
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="span-6" style="grid-column:span 6;">
+                <div class="label">Red Flags</div>
+                <div class="list">
+                  {% if value.gemini_claims and value.gemini_claims.red_flags %}
+                    {% for r in value.gemini_claims.red_flags %}
+                      <div class="list-item">{{ r }}</div>
+                    {% endfor %}
+                  {% else %}
+                    <div class="list-item">No red flags available.</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+
+      <div class="card span-6">
+        <h3 class="section-title">Top 3 Committed Repositories</h3>
+        <div class="list">
+          {% for repo in github_data.commit_star.top_3_committed_repos or [] %}
+            <div class="list-item">
+              <strong>{{ repo.repo_name }}</strong><br>
+              {{ repo.commits }} commits · {{ repo.stars }} stars
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card span-6">
+        <h3 class="section-title">Top 3 Starred Repositories</h3>
+        <div class="list">
+          {% for repo in github_data.commit_star.top_3_starred_repos or [] %}
+            <div class="list-item">
+              <strong>{{ repo.repo_name }}</strong><br>
+              {{ repo.stars }} stars · {{ repo.commits }} commits
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card span-12">
+        <h3 class="section-title">Profile Context</h3>
+        <div class="list-item">
+          <strong>Bio:</strong> {{ github_data.context.bio or "No bio available." }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const cards = document.querySelectorAll(".card, .project-card, .list-item, .chip");
+    cards.forEach((el, i) => {
+      el.style.opacity = "0";
+      el.style.transform = "translateY(16px)";
+      setTimeout(() => {
+        el.style.transition = "all 0.45s ease";
+        el.style.opacity = "1";
+        el.style.transform = "translateY(0)";
+      }, 40 * i);
+    });
+  </script>
+</body>
+</html>
