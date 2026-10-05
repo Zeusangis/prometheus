@@ -11,39 +11,17 @@ import {
   type JobApplicant,
 } from "../../api/jobs";
 
-const pipelineStats = [
-  { label: "Sourcing", value: 124, progress: 78 },
-  { label: "Screening", value: 48, progress: 46 },
-  { label: "Verification", value: 12, progress: 24 },
-  { label: "Interview", value: 8, progress: 16 },
-  { label: "Offer", value: 2, progress: 10, highlighted: true },
-];
+const pipelineStages = ["screening", "interview_scheduled", "interview_completed", "offer_made", "hired", "rejected"];
 
 const statusBadgeClassMap: Record<string, string> = {
-  queued: "bg-secondary text-primary-dark",
-  uploaded: "bg-secondary text-primary-dark",
-  ats_scored: "bg-primary-lighter/35 text-primary-dark",
   interview_scheduled: "bg-[#daf2e2] text-[#246747]",
   interview_completed: "bg-[#dcecff] text-[#254f8d]",
   offer_made: "bg-[#efe6ff] text-[#4f3a9e]",
   hired: "bg-[#d8f6e4] text-[#1c7f4d]",
   screening: "bg-primary-lighter/35 text-primary-dark",
-  shortlisted: "bg-[#daf2e2] text-[#246747]",
   rejected: "bg-[#ffe3e0] text-[#9a3530]",
 };
 
-const nextStatusMap: Record<string, string | null> = {
-  queued: "uploaded",
-  uploaded: "ats_scored",
-  ats_scored: "interview_scheduled",
-  interview_scheduled: "interview_completed",
-  interview_completed: "offer_made",
-  offer_made: "hired",
-  hired: null,
-  rejected: null,
-  screening: "ats_scored",
-  shortlisted: "interview_scheduled",
-};
 
 function toStatusLabel(status: string) {
   return status
@@ -84,6 +62,16 @@ export default function JobDetail() {
     enabled: !!jobId,
   });
 
+  const pipelineStats = pipelineStages.map((stage) => {
+    const value = applicants?.filter((candidate) => candidate.status === stage).length;
+    return {
+      label: toStatusLabel(stage),
+      value: isApplicantsLoading || applicantsError ? "—" : value ?? 0,
+      progress: applicants?.length && value !== undefined ? (value / applicants.length) * 100 : 0,
+      highlighted: stage === "offer_made",
+    };
+  });
+
   const moveStageMutation = useMutation({
     mutationFn: async (params: { candidateId: number; nextStatus: string }) => {
       return moveCandidateToNextStep({
@@ -108,8 +96,7 @@ export default function JobDetail() {
   });
 
   const handleMoveToNextStage = (applicant: JobApplicant) => {
-    const normalizedStatus = applicant.status.toLowerCase();
-    const nextStatus = nextStatusMap[normalizedStatus];
+    const nextStatus = applicant.allowed_actions.find((action) => action !== "rejected");
 
     if (!nextStatus) {
       return;
@@ -256,7 +243,7 @@ export default function JobDetail() {
               </div>
             </section>
 
-            <section className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <section className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">
               {pipelineStats.map((stat) => (
                 <article
                   key={stat.label}
@@ -346,7 +333,7 @@ export default function JobDetail() {
                     const statusClass =
                       statusBadgeClassMap[normalizedStatus] ||
                       "bg-secondary text-primary-dark";
-                    const nextStatus = nextStatusMap[normalizedStatus];
+                    const nextStatus = applicant.allowed_actions.find((action) => action !== "rejected");
                     const isMovingThisCandidate =
                       moveStageMutation.isPending &&
                       moveStageMutation.variables?.candidateId === applicant.id;
@@ -407,6 +394,9 @@ export default function JobDetail() {
                           >
                             {toStatusLabel(applicant.status)}
                           </span>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Analysis: {toStatusLabel(applicant.analysis_status)}
+                          </p>
                         </div>
 
                         <Link
@@ -417,6 +407,13 @@ export default function JobDetail() {
                           View Profile
                         </Link>
 
+                        {applicant.allowed_actions.includes("rejected") && (
+                          <button
+                            disabled={moveStageMutation.isPending}
+                            onClick={() => setConfirmMoveTarget({ candidateId: applicant.id, candidateName: applicant.full_name, nextStatus: "rejected" })}
+                            className="rounded-2xl px-4 py-2 text-sm font-semibold text-red-700"
+                          >Reject</button>
+                        )}
                         <button
                           onClick={() => handleMoveToNextStage(applicant)}
                           disabled={!nextStatus || moveStageMutation.isPending}

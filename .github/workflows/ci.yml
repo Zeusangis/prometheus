@@ -1,0 +1,54 @@
+name: TrueHire CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    env:
+      FLASK_ENV: test
+      SECRET_KEY: ci-only-not-production
+      DATABASE_URL: sqlite:////tmp/truehire-ci.sqlite
+      CELERY_BROKER_URL: memory://
+      CELERY_RESULT_BACKEND: cache+memory://
+      PYTHONDONTWRITEBYTECODE: "1"
+    defaults:
+      run:
+        working-directory: talent_intelligence_backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            talent_intelligence_backend/requirements.txt
+            talent_intelligence_backend/requirements-dev.txt
+      - run: python -m pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: python -m pytest -q
+      - name: Fresh database migration smoke and schema drift check
+        run: |
+          flask --app app db upgrade
+          flask --app app db check
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend_hackathon_1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend_hackathon_1/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run build

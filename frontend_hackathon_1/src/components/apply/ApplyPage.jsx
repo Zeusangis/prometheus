@@ -1,11 +1,17 @@
 // src/pages/apply/ApplyPage.jsx
 import { useRef, useState } from "react";
 import { useParams } from "@tanstack/react-router";
-import { useMutation } from "@tanstack/react-query";
-import { submitApplication } from "../../api/apply";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { getJobInfo, submitApplication } from "../../api/apply";
 
 export default function ApplyPage() {
   const { jobId } = useParams({ strict: false });
+  const { data: job, isLoading: isJobLoading, error: jobError } = useQuery({
+    queryKey: ["public-job", jobId],
+    queryFn: () => getJobInfo(jobId),
+    enabled: !!jobId,
+    retry: false,
+  });
   const [submitted, setSubmitted] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -19,7 +25,7 @@ export default function ApplyPage() {
 
   const updateResumeFile = (file) => {
     if (!file) return;
-    const isPdf = file.type === "application/pdf" || file.name.endsWith(".pdf");
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
     if (!isPdf) {
       setErrorMessage("Please upload a PDF file only.");
       return;
@@ -47,10 +53,8 @@ export default function ApplyPage() {
       formData.append("github_username", form.githubUsername);
       formData.append("jobId", jobId);
 
-      // Keep both keys for broader backend compatibility.
       if (resumeFile) {
         formData.append("resume", resumeFile);
-        formData.append("file", resumeFile);
       }
 
       return submitApplication(jobId, formData);
@@ -63,7 +67,7 @@ export default function ApplyPage() {
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
 
   const handleSubmit = () => {
-    if (!form.fullName || !form.email || !form.githubUsername || !resumeFile) {
+    if (!job || !form.fullName || !form.email || !resumeFile) {
       setErrorMessage("Please complete all fields before submitting.");
       return;
     }
@@ -86,7 +90,7 @@ export default function ApplyPage() {
         <header className="h-14 border-b border-[#e4e6e6] bg-white/90 backdrop-blur">
           <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between px-5">
             <div className="text-[31px] font-semibold tracking-[-0.02em] text-[#11543b]">
-              HireFlow
+              TrueHire
             </div>
           </div>
         </header>
@@ -108,8 +112,7 @@ export default function ApplyPage() {
               Application Submitted
             </h1>
             <p className="mt-2 text-sm text-[#57655e]">
-              Thanks for applying. Your application has been received and next
-              steps will be shared through email.
+              Thanks for applying. Your application has been saved for recruiter review.
             </p>
           </div>
         </div>
@@ -122,17 +125,10 @@ export default function ApplyPage() {
       <header className="h-14 border-b border-[#e4e6e6] bg-white/90 backdrop-blur">
         <div className="mx-auto flex h-full w-full max-w-6xl items-center justify-between px-5">
           <div className="text-[31px] font-semibold tracking-[-0.02em] text-[#11543b]">
-            HireFlow
+            TrueHire
           </div>
 
-          <nav className="hidden items-center gap-10 text-sm text-[#1f2b24] md:flex">
-            <span>Browse Jobs</span>
-            <span>Help Center</span>
-          </nav>
 
-          <button className="text-sm font-semibold text-[#11543b]">
-            Sign In
-          </button>
         </div>
       </header>
 
@@ -160,20 +156,23 @@ export default function ApplyPage() {
 
             <div>
               <h1 className="text-[37px] font-semibold tracking-[-0.01em] text-[#1f2b24]">
-                Job Application
+                {isJobLoading ? "Loading job…" : job?.title || "Job unavailable"}
               </h1>
               <p className="mt-1 text-sm text-[#617067]">
-                Join our growing ecosystem
+                {job ? `${job.company} • ${job.type}${job.location ? ` • ${job.location}` : ""}` : ""}
               </p>
             </div>
           </div>
 
-          <div className="space-y-4">
+          {jobError && <p role="alert" className="mb-4 text-sm text-red-700">{jobError.message}</p>}
+          {job?.description && <p className="mb-6 whitespace-pre-wrap text-sm text-[#617067]">{job.description}</p>}
+          <fieldset disabled={!job || isPending} className="space-y-4">
             <div>
               <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-[#33433a]">
                 Full Name
               </label>
               <input
+                aria-label="Full Name"
                 type="text"
                 value={form.fullName}
                 onChange={set("fullName")}
@@ -187,6 +186,7 @@ export default function ApplyPage() {
                 Email Address
               </label>
               <input
+                aria-label="Email Address"
                 type="email"
                 value={form.email}
                 onChange={set("email")}
@@ -197,13 +197,14 @@ export default function ApplyPage() {
 
             <div>
               <label className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.18em] text-[#33433a]">
-                GitHub Username
+                GitHub Username (optional)
               </label>
               <div className="flex overflow-hidden rounded-xl border border-[#e4e6e6] focus-within:border-[#b9c9bf]">
                 <span className="border-r border-[#e4e6e6] bg-[#f9faf9] px-4 py-3 text-sm text-[#445449]">
                   github.com/
                 </span>
                 <input
+                  aria-label="GitHub Username"
                   type="text"
                   value={form.githubUsername}
                   onChange={set("githubUsername")}
@@ -290,11 +291,11 @@ export default function ApplyPage() {
                 onChange={(e) => updateResumeFile(e.target.files?.[0])}
               />
             </div>
-          </div>
+          </fieldset>
 
           {(errorMessage || error) && (
             <p className="mt-4 rounded-lg border border-[#f1cccc] bg-[#fff6f5] px-3 py-2 text-sm text-[#9a3530]">
-              {errorMessage || "Something went wrong. Please try again."}
+              {errorMessage || error?.message || "Something went wrong. Please try again."}
             </p>
           )}
 
@@ -302,9 +303,9 @@ export default function ApplyPage() {
             onClick={handleSubmit}
             disabled={
               isPending ||
+              !job ||
               !form.fullName ||
               !form.email ||
-              !form.githubUsername ||
               !resumeFile
             }
             className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#0f6c45] py-3.5 text-sm font-semibold text-white transition-colors hover:bg-[#0d5c3b] disabled:cursor-not-allowed disabled:opacity-50"

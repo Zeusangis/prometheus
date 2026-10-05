@@ -1,15 +1,7 @@
 from datetime import datetime, timezone
 from models import db
 
-STATUS_FLOW = [
-    "uploaded",
-    "ats_scored",
-    "interview_scheduled",
-    "interview_completed",
-    "offer_made",
-    "hired",
-    "rejected",
-]
+from services.candidate_stage import allowed_actions
 
 
 class Candidate(db.Model):
@@ -28,9 +20,10 @@ class Candidate(db.Model):
         "MeetingSummary", back_populates="candidate", lazy=True
     )
     raw_text = db.Column(db.Text, nullable=True)
-    # Tracks where the file is in the pipeline
-    ats_score = db.Column(db.Float, nullable=True)  # Score from 0.0 to 100.0
-    status = db.Column(db.String(50), default="uploaded")
+    ats_score = db.Column(db.Float, nullable=True)
+    status = db.Column(db.String(50), nullable=False, default="screening")
+    analysis_status = db.Column(db.String(50), nullable=False, default="queued")
+    analysis_error = db.Column(db.Text, nullable=True)
 
     uploaded_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -42,7 +35,10 @@ class Candidate(db.Model):
             "github_username": self.github_username,
             "filename": self.original_filename,
             "status": self.status,
-            "raw_text": self.raw_text,
+            "analysis_status": self.analysis_status,
+            "analysis_error": self.analysis_error,
+            "ats_score": self.ats_score,
+            "allowed_actions": allowed_actions(self.status),
             "uploaded_at": self.uploaded_at.isoformat(),
             "job_id": self.job_id,
         }

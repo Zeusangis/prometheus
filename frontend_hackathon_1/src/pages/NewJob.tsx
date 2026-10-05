@@ -176,10 +176,18 @@ export default function NewJob() {
                 Application link
               </p>
               <p className="mt-2 break-all text-sm font-medium text-gray-900">
-                {createdJob.applicationLink}
+                {new URL(createdJob.publicApplicationPath, window.location.origin).href}
               </p>
             </div>
 
+            <a
+              href={createdJob.publicApplicationPath}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-4 block text-sm font-semibold text-green-700 underline"
+            >
+              Open public application
+            </a>
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
               <button
                 onClick={() => {

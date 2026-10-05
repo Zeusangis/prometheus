@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Link, useParams } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "../../components/Sidebar";
 import { Header } from "../../components/Header";
 import ResumeSection from "./ResumeSection";
+import { getCandidateProfile } from "../../api/apply";
 import type { ResumeAnalysisData } from "./ResumeSection";
 
 const PROFILE_TABS = [
@@ -102,6 +104,14 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] =
     useState<(typeof PROFILE_TABS)[number]>("Overview");
 
+  const { data: candidateData } = useQuery({
+    queryKey: ["candidate", candidateId],
+    queryFn: () => getCandidateProfile(candidateId),
+  });
+
+  const candidateName =
+    candidateData?.full_name || candidateData?.name || "Jane Sutherland";
+
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar />
@@ -116,7 +126,7 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-3">
                   <div>
                     <h1 className="text-3xl font-semibold leading-tight text-foreground">
-                      Jane Sutherland
+                      {candidateName}
                     </h1>
                     <p className="mt-1 text-base text-[#425349]">
                       Senior UI/UX Designer • London, United Kingdom

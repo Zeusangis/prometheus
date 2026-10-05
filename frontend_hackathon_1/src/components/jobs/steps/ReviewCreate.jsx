@@ -93,9 +93,9 @@ export default function ReviewCreate({ data }) {
         <ul className="flex flex-col gap-2">
           {[
             "A shareable application link to send to candidates",
-            "A live dashboard to track and score all applicants",
-            "Automatic GitHub scraping triggered on each application",
-            "AI interviews auto-sent after applications are reviewed",
+            "An applicant list with recruiter-controlled stages",
+            "Stored GitHub analysis preferences (analysis integration pending)",
+            "Stored interview settings (live interviews not yet available)",
           ].map((item) => (
             <li
               key={item}

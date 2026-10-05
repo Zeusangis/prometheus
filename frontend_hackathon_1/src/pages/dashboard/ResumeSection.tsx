@@ -262,7 +262,7 @@ export default function ResumeSection({ data }: ResumeSectionProps) {
       </div>
 
       <div className="grid grid-cols-1 gap-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#9aa8a0] md:grid-cols-2">
-        <p>HireFlow Intelligent ATS Analysis</p>
+        <p>TrueHire Intelligent ATS Analysis</p>
         <p className="md:text-right">
           Privacy Policy · Terms Of Service · Data Protocol v2.4
         </p>

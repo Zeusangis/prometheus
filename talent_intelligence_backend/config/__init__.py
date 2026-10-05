@@ -42,7 +42,9 @@ def configure_app(app, overrides=None):
     if environment not in configs:
         raise ValueError("FLASK_ENV must be development, test, or production")
     app.config.from_object(configs[environment])
-    database_url = os.environ.get("DATABASE_URL", "sqlite:///talent_intelligence.db")
+    database_url = os.environ.get("DATABASE_URL") or app.config.get(
+        "SQLALCHEMY_DATABASE_URI", "sqlite:///talent_intelligence.db"
+    )
     if database_url.startswith("postgresql://"):
         database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
     app.config.update(
@@ -51,9 +53,11 @@ def configure_app(app, overrides=None):
         UPLOAD_FOLDER=os.environ.get("UPLOAD_FOLDER") or str(BACKEND_ROOT / "uploads"),
         FRONTEND_ORIGIN=os.environ.get("FRONTEND_ORIGIN", "http://localhost:5173"),
         CELERY={
-            "broker_url": os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0"),
-            "result_backend": os.environ.get(
-                "CELERY_RESULT_BACKEND", "redis://localhost:6379/0"
+            "broker_url": os.environ.get("CELERY_BROKER_URL") or app.config.get("CELERY", {}).get(
+                "broker_url", "redis://localhost:6379/0"
+            ),
+            "result_backend": os.environ.get("CELERY_RESULT_BACKEND") or app.config.get("CELERY", {}).get(
+                "result_backend", "redis://localhost:6379/0"
             ),
             "task_ignore_result": True,
             "task_publish_retry": False,

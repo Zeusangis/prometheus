@@ -1,8 +1,9 @@
 import { recordJobSubmission } from "./jobSubmissionLog";
+import { apiErrorMessage } from "./errors";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, "") ||
-  "http://127.0.0.1:5000";
+  "";
 
 export type MetricConfig = {
   enabled: boolean;
@@ -26,7 +27,8 @@ export type NewJobInput = {
 
 export type CreatedJob = {
   id: string;
-  applicationLink: string;
+  publicApplicationPath: string;
+  createdAt: string;
 };
 
 export type CompanyJob = {
@@ -70,8 +72,11 @@ export type JobApplicant = {
   email: string;
   github_username: string | null;
   filename: string | null;
-  raw_text: string | null;
   status: string;
+  analysis_status: string;
+  analysis_error: string | null;
+  ats_score: number | null;
+  allowed_actions: string[];
   uploaded_at: string;
 };
 
@@ -135,7 +140,7 @@ export async function moveCandidateToNextStep(params: {
   };
 
   if (!response.ok) {
-    throw new Error(payload.error || "Failed to move candidate to next step");
+    throw new Error(apiErrorMessage(payload, "Failed to move candidate to next step"));
   }
 
   if (!payload.success) {
@@ -161,7 +166,7 @@ export async function getJobById(jobId: string): Promise<JobDetail> {
   };
 
   if (!response.ok) {
-    throw new Error(payload.error || "Failed to fetch job details");
+    throw new Error(apiErrorMessage(payload, "Failed to fetch job details"));
   }
 
   if (!payload.job) {
@@ -183,7 +188,7 @@ export async function getJobApplicants(jobId: string): Promise<JobApplicant[]> {
   };
 
   if (!response.ok) {
-    throw new Error(payload.error || "Failed to fetch applicants");
+    throw new Error(apiErrorMessage(payload, "Failed to fetch applicants"));
   }
 
   return payload.applicants ?? [];
@@ -198,7 +203,7 @@ export async function getCompanyJobs(): Promise<CompanyJob[]> {
   };
 
   if (!response.ok) {
-    throw new Error(payload.error || "Failed to fetch jobs");
+    throw new Error(apiErrorMessage(payload, "Failed to fetch jobs"));
   }
 
   return payload.jobs ?? [];
@@ -220,7 +225,7 @@ export async function getTotalJobs(): Promise<number> {
         continue;
       }
 
-      throw new Error(payload.error || "Failed to fetch total jobs count");
+      throw new Error(apiErrorMessage(payload, "Failed to fetch total jobs count"));
     }
 
     return payload.total_jobs ?? 0;
@@ -244,16 +249,16 @@ export async function createJob(job: NewJobInput): Promise<CreatedJob> {
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    const message =
-      (payload as { error?: string })?.error || "Failed to create job";
+    const message = apiErrorMessage(payload, "Failed to create job");
     throw new Error(message);
   }
 
   const createdJob = payload as Partial<CreatedJob>;
   const id = createdJob.id;
-  const applicationLink = createdJob.applicationLink;
+  const publicApplicationPath = createdJob.publicApplicationPath;
+  const createdAt = createdJob.createdAt;
 
-  if (!id || !applicationLink) {
+  if (!id || !publicApplicationPath?.startsWith("/apply/") || !createdAt) {
     throw new Error("Invalid response from server while creating job");
   }
 
@@ -261,6 +266,7 @@ export async function createJob(job: NewJobInput): Promise<CreatedJob> {
 
   return {
     id,
-    applicationLink,
+    publicApplicationPath,
+    createdAt,
   };
 }

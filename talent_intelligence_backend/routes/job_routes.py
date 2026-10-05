@@ -2,7 +2,8 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
+from utils.api_errors import api_error
 
 from models import Job, db
 
@@ -80,10 +81,11 @@ def _isoformat_z(dt):
 
 
 def build_created_job_response(job):
-    application_link = f"{request.host_url.rstrip('/')}/api/apply/{job.id}"
+    public_path = f"/apply/{job.id}"
     return {
         "id": f"job_{job.id}",
-        "applicationLink": application_link,
+        "publicApplicationPath": public_path,
+        "applicationLink": public_path,  # Temporary compatibility; never a backend-host URL.
         "createdAt": _isoformat_z(job.posted_date),
     }
 
@@ -92,6 +94,8 @@ def build_created_job_response(job):
 @jobs_bp.route("/api/jobs/create", methods=["POST"])
 def create_job_route():
     data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict) or not isinstance(data.get("job", {}), dict):
+        return api_error("job_payload_invalid", "A job object is required.", 400)
     job_payload = data.get("job") or {}
 
     title = job_payload.get("title")
@@ -99,14 +103,11 @@ def create_job_route():
     description = job_payload.get("description")
 
     if not title or not job_type or not description:
-        return jsonify({"error": "Title, job type, and description are required"}), 400
+        return api_error("job_fields_required", "Title, job type, and description are required.", 400)
 
     status = data.get("status", "open")
     if status not in STATUS_OPTIONS:
-        return (
-            jsonify({"error": "Invalid status. Must be one of: open, closed, draft"}),
-            400,
-        )
+        return api_error("job_status_invalid", "Status must be open, closed, or draft.", 400)
 
     recruiter_data = resolve_recruiter_data()
     company_data = extract_company_data(recruiter_data)
@@ -126,9 +127,10 @@ def create_job_route():
         db.session.add(new_job)
         db.session.commit()
         return jsonify(build_created_job_response(new_job)), 201
-    except Exception as exc:
+    except Exception:
         db.session.rollback()
-        return jsonify({"error": f"Failed to create job: {exc}"}), 500
+        current_app.logger.exception("Job creation failed")
+        return api_error("job_create_failed", "Job could not be created.", 500)
 
 
 @jobs_bp.route("/api/jobs/<job_id>", methods=["GET"])
@@ -138,24 +140,40 @@ def get_job(job_id):
 
     parsed_job_id = _parse_job_id(job_id)
     if parsed_job_id is None:
-        return jsonify({"error": "Invalid job id"}), 400
+        return api_error("job_id_invalid", "Invalid job id.", 400)
 
-    job = Job.query.get(parsed_job_id)
+    job = db.session.get(Job, parsed_job_id)
     if not job:
-        return jsonify({"error": "Job not found"}), 404
+        return api_error("job_not_found", "Job not found.", 404)
 
     return jsonify({"success": True, "job": job.to_dict()})
+
+
+@jobs_bp.get("/api/public/jobs/<int:job_id>")
+def get_public_job(job_id):
+    job = db.session.get(Job, job_id)
+    if not job:
+        return api_error("job_not_found", "Job not found.", 404)
+    if job.status != "open":
+        return api_error("job_closed", "This job is not accepting applications.", 409)
+    data = job.to_dict()
+    return jsonify({"success": True, "job": {
+        "id": job.id, "title": job.title, "company": job.company,
+        "location": job.location, "jobType": data["jobType"],
+        "description": job.description, "languages": data["languages"],
+        "frameworks": data["frameworks"], "status": job.status,
+    }})
 
 
 @jobs_bp.route("/api/jobs/<job_id>/info", methods=["GET"])
 def get_job_info(job_id):
     parsed_job_id = _parse_job_id(job_id)
     if parsed_job_id is None:
-        return jsonify({"error": "Invalid job id"}), 400
+        return api_error("job_id_invalid", "Invalid job id.", 400)
 
-    job = Job.query.get(parsed_job_id)
+    job = db.session.get(Job, parsed_job_id)
     if not job:
-        return jsonify({"error": "Job not found"}), 404
+        return api_error("job_not_found", "Job not found.", 404)
 
     job_data = job.to_dict()
     return (
@@ -236,37 +254,35 @@ def get_my_company_jobs():
 def update_job(job_id):
     parsed_job_id = _parse_job_id(job_id)
     if parsed_job_id is None:
-        return jsonify({"error": "Invalid job id"}), 400
+        return api_error("job_id_invalid", "Invalid job id.", 400)
 
-    job = Job.query.get(parsed_job_id)
+    job = db.session.get(Job, parsed_job_id)
     if not job:
-        return jsonify({"error": "Job not found"}), 404
+        return api_error("job_not_found", "Job not found.", 404)
 
     data = request.get_json(silent=True) or {}
     if "status" in data and data.get("status") not in STATUS_OPTIONS:
-        return (
-            jsonify({"error": "Invalid status. Must be one of: open, closed, draft"}),
-            400,
-        )
+        return api_error("job_status_invalid", "Status must be open, closed, or draft.", 400)
 
     try:
         job.update_from_frontend_payload(data)
         db.session.commit()
         return jsonify({"success": True, "job": job.to_dict()}), 200
-    except Exception as exc:
+    except Exception:
         db.session.rollback()
-        return jsonify({"error": f"Failed to update job: {exc}"}), 500
+        current_app.logger.exception("Job update failed")
+        return api_error("job_update_failed", "Job could not be updated.", 500)
 
 
 @jobs_bp.route("/api/jobs/<job_id>/applicants", methods=["GET"])
 def get_job_applicants(job_id):
     parsed_job_id = _parse_job_id(job_id)
     if parsed_job_id is None:
-        return jsonify({"error": "Invalid job id"}), 400
+        return api_error("job_id_invalid", "Invalid job id.", 400)
 
-    job = Job.query.get(parsed_job_id)
+    job = db.session.get(Job, parsed_job_id)
     if not job:
-        return jsonify({"error": "Job not found"}), 404
+        return api_error("job_not_found", "Job not found.", 404)
 
     applicants = [candidate.to_dict() for candidate in job.applicants]
     return jsonify({"success": True, "applicants": applicants})
@@ -276,11 +292,11 @@ def get_job_applicants(job_id):
 def update_job_scraper(job_id):
     parsed_job_id = _parse_job_id(job_id)
     if parsed_job_id is None:
-        return jsonify({"error": "Invalid job id"}), 400
+        return api_error("job_id_invalid", "Invalid job id.", 400)
 
-    job = Job.query.get(parsed_job_id)
+    job = db.session.get(Job, parsed_job_id)
     if not job:
-        return jsonify({"error": "Job not found"}), 404
+        return api_error("job_not_found", "Job not found.", 404)
 
     data = request.get_json(silent=True) or {}
     job.scraper_config = {
@@ -291,20 +307,21 @@ def update_job_scraper(job_id):
     try:
         db.session.commit()
         return jsonify({"success": True, "job": job.to_dict()}), 200
-    except Exception as exc:
+    except Exception:
         db.session.rollback()
-        return jsonify({"error": f"Failed to update scraper config: {exc}"}), 500
+        current_app.logger.exception("Scraper config update failed")
+        return api_error("job_update_failed", "Job configuration could not be updated.", 500)
 
 
 @jobs_bp.route("/api/jobs/<job_id>/interview", methods=["POST"])
 def update_job_interview(job_id):
     parsed_job_id = _parse_job_id(job_id)
     if parsed_job_id is None:
-        return jsonify({"error": "Invalid job id"}), 400
+        return api_error("job_id_invalid", "Invalid job id.", 400)
 
-    job = Job.query.get(parsed_job_id)
+    job = db.session.get(Job, parsed_job_id)
     if not job:
-        return jsonify({"error": "Job not found"}), 404
+        return api_error("job_not_found", "Job not found.", 404)
 
     data = request.get_json(silent=True) or {}
     job.interview_config = {
@@ -318,36 +335,35 @@ def update_job_interview(job_id):
     try:
         db.session.commit()
         return jsonify({"success": True, "job": job.to_dict()}), 200
-    except Exception as exc:
+    except Exception:
         db.session.rollback()
-        return jsonify({"error": f"Failed to update interview config: {exc}"}), 500
+        current_app.logger.exception("Interview config update failed")
+        return api_error("job_update_failed", "Interview configuration could not be updated.", 500)
 
 
 @jobs_bp.route("/api/jobs/<job_id>/status", methods=["POST"])
 def update_job_status(job_id):
     parsed_job_id = _parse_job_id(job_id)
     if parsed_job_id is None:
-        return jsonify({"error": "Invalid job id"}), 400
+        return api_error("job_id_invalid", "Invalid job id.", 400)
 
-    job = Job.query.get(parsed_job_id)
+    job = db.session.get(Job, parsed_job_id)
     if not job:
-        return jsonify({"error": "Job not found"}), 404
+        return api_error("job_not_found", "Job not found.", 404)
 
     data = request.get_json(silent=True) or {}
     status = data.get("status")
     if status not in STATUS_OPTIONS:
-        return (
-            jsonify({"error": "Invalid status. Must be one of: open, closed, draft"}),
-            400,
-        )
+        return api_error("job_status_invalid", "Status must be open, closed, or draft.", 400)
 
     try:
         job.status = status
         db.session.commit()
         return jsonify({"success": True, "job": job.to_dict()}), 200
-    except Exception as exc:
+    except Exception:
         db.session.rollback()
-        return jsonify({"error": f"Failed to update status: {exc}"}), 500
+        current_app.logger.exception("Job status update failed")
+        return api_error("job_update_failed", "Job status could not be updated.", 500)
 
 
 @jobs_bp.route("/api/jobs", methods=["GET"])
