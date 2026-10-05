@@ -5,6 +5,12 @@ env/
 # Environment Variables / Secrets
 .env
 
+# Task-local metadata and generated build state
+.freebuff/
+*.tsbuildinfo
+.pytest_cache/
+.ruff_cache/
+
 # Python Cache
 __pycache__/
 *.py[cod]

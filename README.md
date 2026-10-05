@@ -1,62 +1,93 @@
 # TrueHire
 
-AI-powered technical recruiting — screen candidates smarter, not harder.
+TrueHire is a technical recruiting application under remediation from a hackathon prototype. AI is intended to provide evidence for **human recruiter decisions**, never automatic hiring or rejection.
 
-## Problem
+## Current feature status
 
-Technical recruiting is broken. Recruiters can't evaluate code, so they rely on resumes that are easy to fake. Candidates list skills they don't have, and engineers waste hours in interviews with people who aren't qualified. There's no fast, objective way to know if someone can actually do the job.
+- Implemented core: React job wizard, Flask job persistence/list/update, PDF application storage, Celery PDF extraction, applicant listing.
+- Being stabilized: public job/application flow, separate recruiting/processing states, recoverable enqueue failures, regression coverage.
+- **Not production-ready:** recruiter authentication, organization authorization, persisted ATS/GitHub AI analysis, real candidate/dashboard/interview screens, secure interview sessions and evaluation are still required. Existing demo screens are not evidence of functioning integrations.
+- `main1/`, referenced in the remediation plan, is absent from this checkout. Prototype migration requires obtaining those sources first.
 
-## Solution
+See [the engineering audit](docs/engineering-audit.md) for baseline failures and checkpoint status.
 
-TrueHire gives recruiters an AI-powered pipeline that automatically verifies a candidate's technical ability before any human time is spent. It scrapes their GitHub profile, analyses their actual code against the job requirements, and then conducts an AI interview that digs into their real understanding of their own work.
+## Architecture and folders
 
-## How it works
+```text
+React + Vite + TanStack Router/Query
+                  | /api
+        Flask modular application
+          | SQLAlchemy/Alembic
+          | Celery -> Redis -> worker
+```
 
-1. Recruiter creates a job posting and configures what to look for — languages, code quality metrics, interview tone, and custom questions
-2. Candidate receives a link (via LinkedIn, email, etc.) and fills out a simple application form with their resume and GitHub username
-3. TrueHire scrapes their GitHub and scores them across metrics like language match, code quality, security practices, and test coverage
-4. The AI interviewer conducts a personalised interview based on their actual GitHub projects, asking them to explain their own code and decisions
-5. Recruiter sees a full dashboard with scores, GitHub analysis, and the complete interview transcript for every candidate
+- `frontend_hackathon_1/`: React 19, Vite, TypeScript, Tailwind, TanStack.
+- `talent_intelligence_backend/`: Flask, SQLAlchemy, Flask-Migrate/Alembic, Celery, PyPDF2.
+- `docs/`: engineering audit and verification notes.
 
-## Key features
+The repository name may remain `prometheus`; the product is TrueHire. No directory renames are necessary.
 
-- **GitHub scraper** — analyses real code against configurable metrics with weighted scoring
-- **AI interviewer** — conducts personalised interviews based on each candidate's actual GitHub profile
-- **Job creation wizard** — 4-step setup for job details, scraper config, interview setup, and review
-- **Recruiter dashboard** — overview of all jobs, applicant counts, and score distributions
-- **Candidate detail page** — full breakdown of scores, GitHub analysis summary, and interview transcript
-- **Applicant-facing flow** — clean application form and AI interview interface via shareable link
+## Prerequisites
 
-## AI usage
+- Node.js **22.12+** and npm (one lockfile; do not use pnpm).
+- Python **3.11+** (3.14 also tested locally).
+- Redis for asynchronous processing.
+- SQLite for lightweight local development; PostgreSQL recommended for deployment.
 
-- **GitHub analysis** — AI reads and evaluates the candidate's repositories, assessing code quality, security practices, and how well their skills match the job requirements
-- **AI interviewer** — conducts the interview dynamically, asking follow-up questions based on the candidate's GitHub profile and probing deeper when answers need clarification
-- **Interview summary** — AI generates a written assessment of the candidate after the interview completes
-
-## Tech stack
-
-**Frontend** — React, Vite, TanStack Router, TanStack Query, Tailwind CSS, Recharts
-
-**Backend** — Python, Flask (or FastAPI)
-
-## Running locally
-
-### Frontend
+## Environment
 
 ```bash
-cd client
-npm install
+cp .env.example .env
+# Edit .env locally; never commit it.
+```
+
+Configuration reads the root `.env`. The existing backend-local `.env` is supported for compatibility, with explicit process/root values taking precedence. Use `FLASK_ENV=development`, `test`, or `production`. Production requires an explicit `SECRET_KEY` of at least 32 characters and `DATABASE_URL`; it cannot silently use a development secret.
+
+Provider settings (`GEMINI_API_KEY`, `GITHUB_TOKEN`, `NAVTALK_API_KEY`, `NAVTALK_NAME`, `NAVTALK_AVATAR_ID`) are **server-only placeholders**, not proof that an integration exists. Never put secrets in any `VITE_*` variable or send long-lived keys to browser JavaScript. Live interviews must stay disabled until a secure provider-supported credential model is verified.
+
+## Local setup
+
+Backend terminal:
+
+```bash
+cd talent_intelligence_backend
+python3 -m venv venv
+source venv/bin/activate
+python -m pip install -r requirements.txt
+flask --app app db upgrade
+flask --app app run --host=127.0.0.1 --port=5000
+```
+
+Worker terminal (same virtualenv/environment):
+
+```bash
+cd talent_intelligence_backend
+source venv/bin/activate
+celery -A app.celery_app worker --loglevel=info
+```
+
+Frontend terminal:
+
+```bash
+cd frontend_hackathon_1
+npm ci
 npm run dev
 ```
 
-### Backend
+Open `http://localhost:5173`. Vite proxies `/api` to `http://127.0.0.1:5000`; production should route frontend and API through the same origin. Optional `VITE_API_BASE_URL` overrides belong in `frontend_hackathon_1/.env.local`. `FRONTEND_ORIGIN` restricts cross-origin access when explicitly needed. `/api/health` checks application boot, not provider connectivity.
+
+## Verification
 
 ```bash
-cd server
-pip install -r requirements.txt
-python app.py
+cd frontend_hackathon_1
+npm run typecheck
+npm run build
 ```
 
-### Environment variables
+Backend test/lint/CI commands and Compose orchestration will be documented when delivered, not before they exist. Database changes always use `flask --app app db upgrade`; do not delete existing databases or use `db.create_all()` to bypass migration history.
 
-Create a `.env` file inside the `client/` folder:
+## Security and deployment boundaries
+
+Do not deploy this checkpoint with real candidate data: recruiter APIs are still unauthenticated/unscoped. Static recruiter identity and demo UI remain pending replacement. Restricted CORS alone is not authorization. Uploads use local storage for development; production needs controlled object storage, retention/deletion policy, and access control. PDF type checks are not malware scanning. AI scores must remain decision support.
+
+No license decision, repository metadata update, remote push, or deployment is included in remediation without an explicit request.

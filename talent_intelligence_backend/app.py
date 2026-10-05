@@ -3,9 +3,10 @@ import os
 from flask import Flask
 from flask_cors import CORS
 from flask_migrate import Migrate
-from config import Config
+from config import configure_app
 from models import db
 from utils.celery_setup import celery_init_app
+from utils.api_errors import register_error_handlers
 
 from routes.github_routes import github_bp
 from routes.job_routes import jobs_bp
@@ -13,17 +14,11 @@ from routes.application_routes import application_bp
 from routes.check_portfolio_routes import check_portfolio_bp
 
 
-def create_app():
+def create_app(config_overrides=None):
     app = Flask(__name__)
-    app.config.from_object(Config)
+    configure_app(app, config_overrides)
 
-    # Enable CORS for local frontend clients and browser extension contexts.
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
-
-    # It's usually better to put these inside your config.py,
-    # but defining them here works perfectly fine for now!
-    app.config["UPLOAD_FOLDER"] = "uploads"
-    app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10MB
+    CORS(app, resources={r"/api/*": {"origins": app.config["FRONTEND_ORIGIN"]}})
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
@@ -31,7 +26,13 @@ def create_app():
     db.init_app(app)
     Migrate(app, db)
 
-    # Initialize Celery
+    celery_init_app(app)
+    register_error_handlers(app)
+
+    @app.get("/api/health")
+    def health():
+        return {"status": "ok", "service": "TrueHire"}
+
     # Register blueprints
     app.register_blueprint(github_bp)
     app.register_blueprint(application_bp)
@@ -42,7 +43,7 @@ def create_app():
 
 
 app = create_app()
-celery_app = celery_init_app(app)
+celery_app = app.extensions["celery"]
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(port=5000)

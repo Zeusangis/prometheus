@@ -5,7 +5,7 @@ export function TimeTracker() {
   const [isRunning, setIsRunning] = useState(true);
 
   useEffect(() => {
-    let interval: number | undefined;
+    let interval: ReturnType<typeof setInterval> | undefined;
     if (isRunning) {
       interval = setInterval(() => {
         setTime((prev) => prev + 1);
