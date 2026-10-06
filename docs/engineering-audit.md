@@ -76,6 +76,47 @@ Work in independently verified checkpoints, preserving the React wizard, Flask b
 - One test initially failed because login fixtures made a request before a test registered its error route; it was repaired by replacing an existing view, with the same secret-leak assertions retained. No checks were skipped.
 - Still unverified: PostgreSQL runtime, hosted CI status, actual provider integrations. Rate limiting and the legacy prototype's insecure endpoints remain pending; `main1` must not be run publicly.
 
+## Phases 5–6 checkpoint — 2026-10-06
+
+### PHASE
+
+Persistent analysis foundation and job-aware Gemini resume analysis. This is a bounded checkpoint, not completion of GitHub integration or the full remediation plan.
+
+### COMPLETED
+
+- Durable one-to-one resume/GitHub records and per-repository storage; application persistence includes empty records before enqueue.
+- Organization-scoped analysis GET and existing CSRF-protected retry API; completed components survive partial retries and sequential redelivery.
+- Existing registered Celery task now extracts text and runs lazy, server-only Gemini structured analysis using linked job context and the prototype's category weights.
+- Strict finite/bounded score, breakdown-sum, list and summary validation; safe persisted parsing/missing-key/provider failures. AI never changes recruiting stage.
+- GitHub absence is optional/null; requested GitHub analysis explicitly reports unavailable rather than inventing evidence.
+
+### FILES CHANGED
+
+- [analysis models](../talent_intelligence_backend/models/analysis.py), candidate relationships and model registration.
+- [orchestration](../talent_intelligence_backend/services/candidate_analysis.py), [Gemini adapter](../talent_intelligence_backend/services/ai/gemini.py), [resume analyzer](../talent_intelligence_backend/services/resume/analyzer.py), worker and application routes.
+- [worker regression tests](../talent_intelligence_backend/tests/test_resume_pipeline.py), [provider validation tests](../talent_intelligence_backend/tests/test_resume_analyzer.py), migration/authorization tests and isolated fixtures.
+- SDK dependency, root environment template, README and this audit.
+
+### DATABASE MIGRATIONS
+
+[c840ab218f12](../talent_intelligence_backend/migrations/versions/c840ab218f12_persist_resume_github_and_repository_.py) adds three tables and backfills existing candidates with pending records. Existing candidate text/scores/stages and jobs remain unchanged; no historical provider results are invented. Fresh upgrades, schema drift and legacy downgrade/reupgrade are tested. Downgrade drops component results as documented.
+
+### VERIFICATION RUN
+
+102 pytest cases and Ruff pass; frontend typecheck and production build pass. Tests isolate provider keys and mock provider output. Fresh SQLite schema check, legacy data preservation and migration roundtrips pass. No assertion weakening or skipped checks.
+
+### MANUAL SMOKE TEST
+
+Real HTTP against an isolated migrated SQLite server on port 5001: cookie/CSRF login, job creation, a parseable PDF containing text, application persistence, missing-key failure saved as null score, protected analysis GET returning 401 without login, retry, and unchanged screening stage all pass. The smoke server uses Celery eager execution, not a real broker/worker transport. Two smoke-fixture mistakes were corrected before the final pass: missing required jobType and modification of a PDF page copy rather than the writer-owned page. The final command preserves failure status.
+
+### KNOWN LIMITATIONS
+
+Live Gemini calls, PostgreSQL and hosted CI are unverified. GitHub integration and truthful candidate UI are still pending. Concurrent worker deliveries, killed-worker leases/recovery, an enqueue outbox and versioned analysis history are not implemented; only sequential redelivery is verified. Existing dependency deprecation warnings remain. No deployment-readiness claim.
+
+### NEXT PHASE
+
+Migrate bounded GitHub evidence collection/scoring with candidate-attributed activity, then replace candidate/profile mocks with persisted analyses and explicit unavailable states. Continue verified medium-sized GitHub pushes.
+
 ## Subsequent required work
 
 Authentication + organization ownership/CSRF are implemented in Phase 4; deployment remains blocked on remaining privacy/rate-limit/provider/storage work. Persistent analyses and migrated providers, truthful candidate/interview/dashboard screens, secure interview sessions, privacy/rate limits/storage/audit, Compose, and final end-to-end scenario remain required. Do not treat a green initial CI checkpoint as product completion.

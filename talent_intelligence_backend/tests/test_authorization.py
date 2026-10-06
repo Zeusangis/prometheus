@@ -27,7 +27,7 @@ def outsider(app):
 def test_cross_org_reads_and_writes(outsider, apply, job_id):
     candidate_id = apply().json["candidateId"]
     browser, headers = outsider
-    for path in [f"/api/jobs/{job_id}", f"/api/jobs/{job_id}/info", f"/api/jobs/{job_id}/applicants", f"/api/candidates/{candidate_id}"]:
+    for path in [f"/api/jobs/{job_id}", f"/api/jobs/{job_id}/info", f"/api/jobs/{job_id}/applicants", f"/api/candidates/{candidate_id}", f"/api/candidates/{candidate_id}/analysis"]:
         assert browser.get(path).status_code == 404, path
     for method, path, payload in [
         ("PATCH", f"/api/jobs/{job_id}", {"title": "Stolen"}),
@@ -65,3 +65,4 @@ def test_public_application_remains_unauthenticated(app, job_id, pdf_bytes):
     })
     assert response.status_code == 200
     assert public.get(f"/api/candidates/{response.json['candidateId']}").status_code == 401
+    assert public.get(f"/api/candidates/{response.json['candidateId']}/analysis").status_code == 401

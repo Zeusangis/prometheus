@@ -4,9 +4,9 @@ TrueHire is a technical recruiting application under remediation from a hackatho
 
 ## Current feature status
 
-- Implemented core: React job wizard, Flask job persistence/list/update, PDF application storage, Celery PDF extraction, applicant listing.
+- Implemented core: React job wizard, Flask job persistence/list/update, PDF application storage, applicant listing, Celery extraction and job-aware structured Gemini resume analysis, durable component records, and scoped analysis/retry APIs.
 - Stabilized core: actual public job/application links, 5 MB PDF validation, separate recruiting/analysis states, recoverable enqueue failures, recruiter cookie authentication, organization-scoped reads/writes, and CSRF protection.
-- **Not production-ready:** persisted ATS/GitHub AI analysis, truthful candidate/dashboard/interview screens, secure interview sessions/evaluation, rate limiting and production storage are still required. Existing demo screens are not evidence of functioning integrations.
+- **Not production-ready:** GitHub analysis integration, truthful candidate/dashboard/interview screens, secure interview sessions/evaluation, concurrent-worker recovery, rate limiting and production storage are still required. Live Gemini calls have not been verified. Existing demo screens are not evidence of functioning integrations.
 - `main1/` is retained prototype source, now merged from upstream. Do not run its legacy Flask app or expose it publicly; its secret-returning interview implementation is not integrated into the main app.
 
 See [the engineering audit](docs/engineering-audit.md) for baseline failures and checkpoint status.
@@ -43,7 +43,7 @@ cp .env.example .env
 
 Configuration reads the root `.env`. The existing backend-local `.env` is supported for compatibility, with explicit process/root values taking precedence. Use `FLASK_ENV=development`, `test`, or `production`. Production requires an explicit `SECRET_KEY` of at least 32 characters and `DATABASE_URL`; it cannot silently use a development secret.
 
-Provider settings (`GEMINI_API_KEY`, `GITHUB_TOKEN`, `NAVTALK_API_KEY`, `NAVTALK_NAME`, `NAVTALK_AVATAR_ID`) are **server-only placeholders**, not proof that an integration exists. Never put secrets in any `VITE_*` variable or send long-lived keys to browser JavaScript. Live interviews must stay disabled until a secure provider-supported credential model is verified.
+`GEMINI_API_KEY` enables the server-side resume integration; `GEMINI_MODEL` defaults to `gemini-2.5-flash`. The key is loaded only for worker analysis, so missing configuration does not prevent application boot. `GITHUB_TOKEN`, `NAVTALK_API_KEY`, `NAVTALK_NAME`, and `NAVTALK_AVATAR_ID` remain **server-only placeholders**, not proof that those integrations exist. Never put secrets in any `VITE_*` variable or send long-lived keys to browser JavaScript. Live interviews must stay disabled until a secure provider-supported credential model is verified.
 
 ## Local setup
 
@@ -107,6 +107,16 @@ flask --app app assign-legacy-job --job-id 123 --organization-id 2
 ```
 
 New jobs always belong to the signed-in organization. The old `my-company` route remains a scoped compatibility alias, not a static recruiter lookup.
+
+## Analysis behavior
+
+The registered Celery resume task extracts PDF text, includes the linked job's title/description/languages/frameworks/recruiter instructions, and validates structured provider output before persisting it. Scores must be finite, bounded by their category maxima, and equal the breakdown sum. Prompts treat applicant/job text as untrusted evidence and prohibit automatic hiring decisions. Resume input is capped at 60,000 characters and provider calls have a 60-second timeout.
+
+Authenticated `GET /api/candidates/<id>/analysis` returns `{status, error_message, resume, github}` scoped to the recruiter's organization. Component outputs are null until actually measured. Optional GitHub absence is `github: null`; a requested GitHub analysis currently fails explicitly as unavailable, so a successful resume with GitHub requested is `partial`, not `complete`. Extraction without successful provider output is not completed AI analysis. Missing keys, parsing errors and invalid/provider failures are saved safely and never move recruiting stages.
+
+`POST /api/candidates/<id>/analysis/retry` accepts failed/enqueue_failed/partial candidates, requires CSRF, and preserves completed components. Sequential task redelivery does not repeat successful provider calls or duplicate rows. Concurrent deliveries, worker-kill leases/recovery, a transactional enqueue outbox and versioned analysis history are not yet implemented; late acknowledgment alone does not prove exactly-once execution.
+
+Migration `c840ab218f12` adds resume/GitHub/repository analysis tables and backfills existing candidates with **pending, empty** component records without inventing historical scores or changing their original data. Downgrading this migration removes its component tables/results; candidate/job data remains intact.
 
 ## Security and deployment boundaries
 

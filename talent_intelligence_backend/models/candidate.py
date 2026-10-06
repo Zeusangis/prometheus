@@ -19,6 +19,8 @@ class Candidate(db.Model):
     meeting_summaries = db.relationship(
         "MeetingSummary", back_populates="candidate", lazy=True
     )
+    resume_analysis = db.relationship("ResumeAnalysis", back_populates="candidate", uselist=False, cascade="all, delete-orphan")
+    github_analysis = db.relationship("GitHubAnalysis", back_populates="candidate", uselist=False, cascade="all, delete-orphan")
     raw_text = db.Column(db.Text, nullable=True)
     ats_score = db.Column(db.Float, nullable=True)
     status = db.Column(db.String(50), nullable=False, default="screening")

@@ -9,6 +9,7 @@ from models import Candidate, Job, MeetingSummary, db
 from services.analysis_queue import enqueue_analysis
 from services.auth import owned_candidate
 from services.candidate_stage import InvalidTransition, transition_candidate
+from services.candidate_analysis import ensure_records, prepare_retry
 from utils.api_errors import api_error
 
 application_bp = Blueprint("application", __name__)
@@ -87,6 +88,7 @@ def apply_for_job(job_id):
             job_id=job_id,
         )
         db.session.add(candidate)
+        ensure_records(candidate)
         db.session.commit()
     except Exception:
         db.session.rollback()
@@ -160,6 +162,19 @@ def get_candidate(candidate_id):
     return jsonify({"success": True, "candidate": candidate.to_dict()}), 200
 
 
+@application_bp.get("/api/candidates/<int:candidate_id>/analysis")
+def get_analysis(candidate_id):
+    candidate = owned_candidate(candidate_id)
+    if not candidate:
+        return api_error("candidate_not_found", "Candidate not found.", 404)
+    return jsonify({
+        "status": candidate.analysis_status,
+        "error_message": candidate.analysis_error,
+        "resume": candidate.resume_analysis.to_dict() if candidate.resume_analysis else None,
+        "github": candidate.github_analysis.to_dict() if candidate.github_analysis else None,
+    })
+
+
 @application_bp.post("/api/candidates/<int:candidate_id>/analysis/retry")
 def retry_analysis(candidate_id):
     candidate = owned_candidate(candidate_id)
@@ -167,6 +182,7 @@ def retry_analysis(candidate_id):
         return api_error("candidate_not_found", "Candidate not found.", 404)
     if candidate.analysis_status not in {"failed", "enqueue_failed", "partial"}:
         return api_error("analysis_retry_invalid", "Analysis is already queued, running, or complete.", 409)
+    prepare_retry(candidate)
     candidate.analysis_status = "queued"
     candidate.analysis_error = None
     db.session.commit()

@@ -23,6 +23,8 @@ MIGRATIONS = str(Path(__file__).resolve().parents[1] / "migrations")
 
 @pytest.fixture
 def app(tmp_path, monkeypatch):
+    # A developer's local provider key must never make tests call a live service.
+    monkeypatch.setenv("GEMINI_API_KEY", "")
     application = create_app({
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": "sqlite:///" + str(tmp_path / "test.sqlite"),
@@ -98,8 +100,8 @@ def pdf_bytes():
 
 @pytest.fixture
 def apply(client, job_id, pdf_bytes):
-    def submit(content=None, filename="resume.pdf", mimetype="application/pdf", endpoint=None):
-        data = {"full_name": "Test Applicant", "email": "applicant@example.invalid", "github_username": "test-user"}
+    def submit(content=None, filename="resume.pdf", mimetype="application/pdf", endpoint=None, github_username="test-user"):
+        data = {"full_name": "Test Applicant", "email": "applicant@example.invalid", "github_username": github_username}
         if filename is not None:
             data["resume"] = (io.BytesIO(content if content is not None else pdf_bytes), filename, mimetype)
         return client.post(endpoint or f"/api/public/jobs/{job_id}/apply", data=data)
