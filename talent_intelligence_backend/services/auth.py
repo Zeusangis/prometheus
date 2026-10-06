@@ -7,6 +7,19 @@ from models import Candidate, Job, OrganizationMembership, User, db
 from utils.api_errors import api_error
 
 
+# Machine-readable guard surface: tools/generate_project_context.py documents it.
+AUTH_EXEMPT_PREFIXES = ("/api/public/",)
+AUTH_EXEMPT_PATHS = frozenset({
+    "/api/health", "/api/github/health", "/api/auth/login", "/api/auth/me", "/api/auth/csrf",
+})
+# Only the public submission alias; all other legacy endpoints stay protected.
+AUTH_EXEMPT_ENDPOINTS = frozenset({"application.apply_for_job"})
+
+
+def is_exempt_path(path):
+    return path.startswith(AUTH_EXEMPT_PREFIXES) or path in AUTH_EXEMPT_PATHS
+
+
 def register_auth_guard(app):
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
 
@@ -14,12 +27,9 @@ def register_auth_guard(app):
     def recruiter_guard():
         if request.method == "OPTIONS" or not request.path.startswith("/api/"):
             return None
-        if request.path.startswith("/api/public/") or request.path in {
-            "/api/health", "/api/github/health", "/api/auth/login", "/api/auth/me", "/api/auth/csrf"
-        }:
+        if is_exempt_path(request.path):
             return None
-        # Preserve only the public submission alias; all other legacy endpoints are protected.
-        if request.endpoint == "application.apply_for_job":
+        if request.endpoint in AUTH_EXEMPT_ENDPOINTS:
             return None
         user = authenticated_user()
         if not user:

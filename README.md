@@ -174,4 +174,4 @@ Do not use the application with real candidate data until the remaining producti
 
 Core job management, applications, authentication, persistence, background processing, resume analysis, GitHub analysis, candidate pipelines, the persisted candidate evidence profile, the screening queue and the recruiter dashboard, and CI are implemented. Dashboard filtering/pagination, the interview-summary screen and a secure live AI interview workflow remain under development.
 
-For implementation details and known limitations, see [`docs/engineering-audit.md`](docs/engineering-audit.md).
+For a standing overview of what is built, how it fits together and what is still missing, see [`docs/project-context.md`](docs/project-context.md). For the phase-by-phase audit trail with verification evidence, see [`docs/engineering-audit.md`](docs/engineering-audit.md).
