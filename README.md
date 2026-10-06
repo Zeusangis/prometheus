@@ -29,6 +29,9 @@ Hiring pipeline
 - Weighted technical metrics with transparent score coverage and missing-evidence handling
 - Independent resume and GitHub components with durable results, partial states, and retry support
 - Candidate evidence profiles backed only by persisted results, with explicit pending, failed, partial and not-requested states
+- Resume analysis keeps the exact text extracted from the PDF next to the saved scores, and records an actionable reason whenever analysis cannot run
+- Server readiness reporting for resume analysis: a `/api/health` flag, an operator warning on the dashboard, and a `check-analysis` command that explains what is missing
+- Bounded retry with backoff for transient provider failures, so a brief provider spike does not fail an otherwise valid analysis
 - Asynchronous processing with Celery and Redis
 - Recruiter authentication, CSRF protection, and organization-scoped data access
 - Organization-scoped screening queue with stage and analysis filters, real ATS evidence, and server-authorized stage moves
@@ -124,12 +127,24 @@ Open [http://localhost:5173](http://localhost:5173). Vite proxies `/api` to the 
 Configuration is loaded from the root `.env` file. The most relevant settings are:
 
 - `SECRET_KEY` and `DATABASE_URL` — required for production
-- `GEMINI_API_KEY` and optional `GEMINI_MODEL` — enable server-side resume analysis
+- `GEMINI_API_KEY` — required for server-side resume analysis; without it every applicant records a failed analysis state that names the missing key instead of failing silently. It is read from the root `.env` or `talent_intelligence_backend/.env`
+- `GEMINI_MODEL` — optional; defaults to `gemini-3.8-flash`. The Gemini API retires models for new API keys, so if analysis reports that the model is not recognised, set this to a model the key can use and restart the worker. Free-tier keys allow only a small number of requests per day per model, and GitHub analysis spends one request per sampled repository
 - `GITHUB_TOKEN` — optional read-only authentication for higher GitHub API limits
 - `VITE_API_BASE_URL` — optional frontend API override for local development
 - `FRONTEND_ORIGIN` — optional cross-origin restriction when explicitly required
 
 Never commit secrets or expose provider credentials through `VITE_*` variables. Live interview-provider settings are placeholders and are not an implemented integration.
+
+To check that resume analysis can actually run before applying a candidate:
+
+```bash
+cd talent_intelligence_backend
+source venv/bin/activate
+flask --app app check-analysis           # reports key presence, model, broker and worker advice
+flask --app app check-analysis --live    # also performs one real provider call
+```
+
+This command never prints the key itself.
 
 ## Verification
 
@@ -162,6 +177,8 @@ TrueHire is designed for bounded, reviewable evidence:
 - GitHub evidence is limited by request count, time, repository count, file size, and sampled content; raw repository code is not persisted.
 - Candidate-attributed commits are scoped to the analyzed repositories, default branches, and sampling window. They are not lifetime contribution counts or identity verification.
 - Missing evidence remains `null` rather than being converted into an invented zero.
+- Analysis failures are recorded and shown to the recruiter with a safe, actionable reason (missing or rejected credentials, an unavailable model, quota, or an unreachable provider). Raw provider payloads are never echoed back, and a generic failure never leaks provider internals.
+- Transient provider failures are retried a bounded number of times with backoff. A failure that asks for a long wait, such as an exhausted daily free-tier quota, is not retried, so the system does not spend more of a small request budget to no effect.
 - Recruiting stages are never advanced by provider output or analysis failures, and the client offers only the stage actions the server reports as allowed.
 - The candidate profile renders only saved analysis: it never fabricates scores, skills, contact details or recommendations, and it keeps resume ATS evidence, sampled repository scores and recruiting stages separate.
 - The dashboard and screening queue show only stored applicant records; counts, stages and scores come from the API, and missing analysis is shown as "Not measured" rather than a placeholder number. Screening queue results are always filtered by the recruiter's organization and by jobs that organization owns.
@@ -172,6 +189,8 @@ Do not use the application with real candidate data until the remaining producti
 
 ## Project status
 
-Core job management, applications, authentication, persistence, background processing, resume analysis, GitHub analysis, candidate pipelines, the persisted candidate evidence profile, the screening queue and the recruiter dashboard, and CI are implemented. Dashboard filtering/pagination, the interview-summary screen and a secure live AI interview workflow remain under development.
+Implemented: job management, public applications, recruiter authentication with organization scoping and CSRF, persistence and migrations, background processing, provider error classification and readiness reporting, job-aware resume analysis that persists the extracted PDF text, bounded GitHub evidence, the persisted candidate evidence profile, the screening queue and the recruiter dashboard, and CI.
+
+Not yet implemented: dashboard queue filtering and pagination in the UI, the interview-summary screen and a secure live AI interview workflow, an audit trail, rate limiting, production object storage and retention controls, and worker leases or an outbox for delivery guarantees. There is no frontend test runner, and hosted CI cannot be exercised from every environment. Concrete provider limits also apply in practice: a free-tier Gemini key allows only a small number of requests per day per model, and one applicant's GitHub analysis spends one request per sampled repository, so a small key can exhaust its daily budget and leave analysis genuinely partial until the window resets. The `docs/project-context.md` narrative sections still describe known gaps and next steps in prose rather than as assertions that fail when the code contradicts them; only its generated inventory is test-protected.
 
 For a standing overview of what is built, how it fits together and what is still missing, see [`docs/project-context.md`](docs/project-context.md). For the phase-by-phase audit trail with verification evidence, see [`docs/engineering-audit.md`](docs/engineering-audit.md).
