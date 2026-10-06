@@ -43,6 +43,8 @@ export type CompanyJob = {
   posted_date: string;
   status: "open" | "closed" | "draft";
   total_applicants: number;
+  stage_counts: Record<string, number>;
+  interviewing_count: number;
   company: string;
 };
 

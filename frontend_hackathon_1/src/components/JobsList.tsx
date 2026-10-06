@@ -65,11 +65,23 @@ export function JobsList({ jobs }: JobsListProps) {
                     {statusLabel(job.status)}
                   </span>
                 </td>
-                <td className="px-6 py-5 text-2xl font-semibold text-[#0f6c45]">
-                  {job.total_applicants ?? "--"}
+                <td className="px-6 py-5">
+                  <p className="text-2xl font-semibold text-[#0f6c45]">
+                    {job.total_applicants ?? "--"}
+                  </p>
+                  <p className="mt-1 text-xs text-[#6c7a72]">
+                    {job.stage_counts?.screening
+                      ? `${job.stage_counts.screening} awaiting screening`
+                      : "None awaiting screening"}
+                  </p>
                 </td>
-                <td className="px-6 py-5 text-2xl font-semibold text-[#0f6c45]">
-                  {"--"}
+                <td className="px-6 py-5">
+                  <p className="text-2xl font-semibold text-[#0f6c45]">
+                    {job.interviewing_count ?? "--"}
+                  </p>
+                  <p className="mt-1 text-xs text-[#6c7a72]">
+                    Scheduled or completed interviews
+                  </p>
                 </td>
                 <td className="px-6 py-5 text-right">
                   <Link

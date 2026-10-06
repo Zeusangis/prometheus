@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, current_app, g, jsonify, request
 from utils.api_errors import api_error
 
-from models import Job, db
+from models import Candidate, Job, db
 from services.auth import owned_job, owned_jobs
 
 
@@ -262,13 +262,34 @@ def update_job_status(job_id):
         return api_error("job_update_failed", "Job status could not be updated.", 500)
 
 
+def stage_counts_by_job(job_ids):
+    """One grouped query so a job list never issues a query per job."""
+    if not job_ids:
+        return {}
+    rows = db.session.execute(
+        db.select(Candidate.job_id, Candidate.status, db.func.count())
+        .where(Candidate.job_id.in_(job_ids))
+        .group_by(Candidate.job_id, Candidate.status)
+    ).all()
+    counts = {}
+    for job_id, status, total in rows:
+        counts.setdefault(job_id, {})[status] = total
+    return counts
+
+
+def interviewing_count(stage_counts):
+    return sum(stage_counts.get(stage, 0) for stage in ("interview_scheduled", "interview_completed"))
+
+
 @jobs_bp.route("/api/jobs", methods=["GET"])
 @jobs_bp.route("/api/jobs/", methods=["GET"])
 def list_jobs():
     jobs = db.session.scalars(owned_jobs().order_by(Job.posted_date.desc())).all()
+    counts = stage_counts_by_job([job.id for job in jobs])
     summaries = []
     for job in jobs:
         job_data = job.to_dict()
+        job_counts = counts.get(job.id, {})
         summaries.append(
             {
                 "id": f"job_{job.id}",
@@ -282,6 +303,8 @@ def list_jobs():
                 "location": job_data.get("location"),
                 "posted_date": job_data.get("posted_date"),
                 "total_applicants": len(job.applicants),
+                "stage_counts": job_counts,
+                "interviewing_count": interviewing_count(job_counts),
             }
         )
 

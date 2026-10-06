@@ -2,18 +2,25 @@ import os
 import re
 import uuid
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 from werkzeug.utils import secure_filename
 
 from models import Candidate, Job, MeetingSummary, db
 from services.analysis_queue import enqueue_analysis
-from services.auth import owned_candidate
-from services.candidate_stage import InvalidTransition, transition_candidate
+from services.auth import owned_candidate, owned_job
+from services.candidate_stage import (
+    ANALYSIS_STATUSES, InvalidTransition, RETRYABLE_ANALYSIS, STAGES, transition_candidate,
+)
 from services.candidate_analysis import ensure_records, prepare_retry
 from utils.api_errors import api_error
 
 application_bp = Blueprint("application", __name__)
 MAX_RESUME_BYTES = 5 * 1024 * 1024
+MAX_QUEUE_RESULTS = 200
+QUEUE_FILTERS = {
+    "attention": tuple(RETRYABLE_ANALYSIS),
+    "running": ("queued", "running"),
+}
 
 
 def allowed_file(filename):
@@ -151,6 +158,54 @@ def move_to_next_step(candidate_id, job_id=None):
         "status": candidate.status,
         "meeting_id": candidate.meeting_id,
         "allowed_actions": candidate.to_dict()["allowed_actions"],
+    })
+
+
+@application_bp.get("/api/candidates")
+def list_candidates():
+    """Applicant screening queue, always scoped to the recruiter's organization."""
+    query = (
+        db.select(Candidate, Job.title)
+        .join(Job, Candidate.job_id == Job.id)
+        .where(Job.organization_id == g.organization.id)
+    )
+    stage = request.args.get("stage")
+    if stage and stage not in STAGES:
+        return api_error("stage_invalid", "Unknown recruiting stage.", 400)
+    if stage:
+        query = query.where(Candidate.status == stage)
+    analysis_status = request.args.get("analysis_status")
+    if analysis_status and analysis_status not in ANALYSIS_STATUSES:
+        return api_error("analysis_status_invalid", "Unknown analysis status.", 400)
+    if analysis_status:
+        query = query.where(Candidate.analysis_status == analysis_status)
+    # Named groupings keep the client from inventing its own status vocabulary.
+    for name, statuses in QUEUE_FILTERS.items():
+        if request.args.get(name):
+            query = query.where(Candidate.analysis_status.in_(statuses))
+    job_id = request.args.get("job_id")
+    if job_id:
+        parsed_job_id = _parse_job_id(job_id)
+        if parsed_job_id is None:
+            return api_error("job_id_invalid", "Invalid job id.", 400)
+        if not owned_job(parsed_job_id):
+            return api_error("job_not_found", "Job not found.", 404)
+        query = query.where(Candidate.job_id == parsed_job_id)
+    search = (request.args.get("q") or "").strip()
+    if search:
+        pattern = f"%{search.lower()}%"
+        query = query.where(db.or_(
+            db.func.lower(Candidate.full_name).like(pattern),
+            db.func.lower(Candidate.email).like(pattern),
+        ))
+    rows = db.session.execute(
+        query.order_by(Candidate.uploaded_at.desc(), Candidate.id.desc()).limit(MAX_QUEUE_RESULTS)
+    ).all()
+    return jsonify({
+        "success": True,
+        "candidates": [
+            {**candidate.to_dict(), "job_title": title} for candidate, title in rows
+        ],
     })
 
 

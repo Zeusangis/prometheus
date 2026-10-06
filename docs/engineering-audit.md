@@ -201,6 +201,52 @@ Live Gemini/GitHub calls, PostgreSQL and hosted CI remain unverified; the harnes
 
 Replace the interview-summary mock and the remaining prototype dashboard screens with persisted data, then continue interview-session security and deployment/privacy/concurrency hardening. Push each verified coherent checkpoint.
 
+## Phase 9 checkpoint — 2026-10-06
+
+### PHASE
+
+Applicant screening queue and a recruiter dashboard built from stored applications.
+
+### COMPLETED
+
+- New `GET /api/candidates` screening queue, always scoped to the recruiter's organization through a join on that organization's jobs. It supports validated `stage` and `analysis_status` filters, named `attention` (failed/enqueue_failed/partial) and `running` (queued/running) groupings, job scoping that returns 404 for an unowned job, and case-insensitive name/email search. Results are newest first and bounded to 200 rows.
+- `GET /api/jobs` now reports real `stage_counts` and `interviewing_count` from a single grouped query, so a job list never issues a query per job and no count is client-invented.
+- The dashboard was rewritten against those endpoints: open roles, applicants, awaiting screening and analysis-needing-attention metrics; pipeline distribution across the canonical stages; roles with real applicant and interviewing counts; and a screening queue table showing stage, analysis status, real ATS evidence or "Not measured", review-and-retry links for retryable results, and server-authorized stage moves that invalidate the queue, job list and per-job applicant queries.
+- Removed every fabricated dashboard widget: the fixed stats (24 jobs, 156 applicants, 42 interviews, 8 pending reviews), the "Import Data" button, the analytics bar chart, the "Interview with Sarah Chen" reminder with its Start Interview button, the fake team members with remote avatars and Add Member action, the fixed 41% "Positions Filled" ring, and the time tracker. Those six component files were deleted.
+- Removed dead job-detail controls (a non-functional Edit Job Description button and two no-op icon buttons) and added real ATS evidence to each applicant row.
+- The jobs table "Interviewing" column no longer renders a placeholder dash; it shows the real interviewing count plus how many applicants await screening.
+- The legacy `/candidate/$candidateId` placeholder now redirects to the truthful applicant profile instead of rendering an empty screen.
+
+### FILES CHANGED
+
+[application_routes.py](../talent_intelligence_backend/routes/application_routes.py) (queue endpoint), [job_routes.py](../talent_intelligence_backend/routes/job_routes.py) (stage counts), [candidate_stage.py](../talent_intelligence_backend/services/candidate_stage.py) (analysis status vocabulary); [screening tests](../talent_intelligence_backend/tests/test_screening_queue.py); [screening API client](../frontend_hackathon_1/src/api/screening.ts), [jobs client types](../frontend_hackathon_1/src/api/jobs.ts), [Dashboard](../frontend_hackathon_1/src/components/Dashboard.tsx), [JobsList](../frontend_hackathon_1/src/components/JobsList.tsx), [JobDetail](../frontend_hackathon_1/src/pages/dashboard/JobDetail.tsx), [CandidateDetail](../frontend_hackathon_1/src/pages/dashboard/CandidateDetail.tsx); six deleted prototype components; README and this audit.
+
+### DATABASE MIGRATIONS
+
+None. No schema change: `c840ab218f12` remains the head migration, and the full-suite migration/schema-drift tests still pass.
+
+### VERIFICATION RUN
+
+163 pytest cases pass (12 new screening-queue and job-count cases) and Ruff reports no findings. `npm run typecheck` and `npm run build` both exit 0. The browser smoke again used an isolated migrated SQLite database served from outside the repository, where only `GitHubClient.get` (canned HTTP) and the Gemini `generate_json` entry points are replaced; the real queue query, org scoping, filters, stage transitions and serialization executed. No assertion was weakened and no check was skipped.
+
+### MANUAL SMOKE TEST
+
+Real Chromium against a Vite dev server on port 5183 (proxy to the harness on port 5000), signed in as a seeded recruiter, with four seeded applicants (complete, failed, partial and queued analysis):
+
+- Dashboard rendered 1 open role, 4 applicants, 4 awaiting screening and 2 results needing attention with "1 analysis job still queued or running"; the pipeline showed Screening 4; the roles card showed "4 applicants · 0 interviewing".
+- Screening queue showed all four applicants with their real stage, analysis status (Complete / Failed / Partial / Queued), ATS evidence (68/100 where the resume component completed, "Not measured" where it did not) and "Review and retry" links only for the failed and partial rows.
+- Clicking "Move to Interview Scheduled" on an applicant moved the row to Interview Scheduled, changed its action to "Move to Interview Completed", dropped awaiting screening to 3, showed Interview Scheduled 1 in the pipeline, and updated the roles card to "1 interviewing".
+- `/dashboard/jobs` showed "4 applicants / 3 awaiting screening" and "1 interviewing"; `/candidate/2` redirected to `/profile/2`; job detail listed each applicant with real ATS evidence and no dead controls.
+- The partial applicant's profile reported "Overall status: Partial" with the retry affordance, and no fabricated dashboard string (Sarah Chen, Alexandra Deff, 156 applicants, 41% Positions Filled, Import Data) remained. No console errors and no failed requests.
+
+### KNOWN LIMITATIONS
+
+The queue is capped at 200 rows and returns only applicants linked to a job in the recruiter's organization; the dashboard table shows the 10 most recent of them. The filters exist server-side but the dashboard has no filter or search controls yet, and there is no pagination or CSV export. Live Gemini/GitHub, PostgreSQL, a real broker and hosted CI remain unverified. The interview-summary screen and interview workflow are still mocked, and candidates deleted outside the application would leave no audit trail. Deployment hardening (rate limits, storage, privacy, concurrency) is outstanding.
+
+### NEXT PHASE
+
+Add screening filters, search and pagination to the dashboard, then replace the interview-summary mock and continue interview-session security and deployment hardening. Push each verified coherent checkpoint.
+
 ## Subsequent required work
 
-Authentication + organization ownership/CSRF are implemented in Phase 4; deployment remains blocked on remaining privacy/rate-limit/provider/storage work. Persistent analyses, migrated providers and a truthful, persisted candidate evidence profile (Phase 8) are implemented. The interview-summary and remaining dashboard screens, secure interview sessions, privacy/rate limits/storage/audit, Compose, and the final end-to-end scenario remain required. Do not treat a green initial CI checkpoint as product completion.
+Authentication + organization ownership/CSRF (Phase 4), persisted analyses and providers (Phases 5-7), the truthful applicant evidence profile (Phase 8) and the organization-scoped screening queue and dashboard (Phase 9) are implemented. Deployment remains blocked on remaining privacy/rate-limit/provider/storage work. The interview-summary and interview screens, dashboard filtering/pagination, secure interview sessions, privacy/rate limits/storage/audit, Compose, and the final end-to-end scenario remain required. Do not treat a green initial CI checkpoint as product completion.

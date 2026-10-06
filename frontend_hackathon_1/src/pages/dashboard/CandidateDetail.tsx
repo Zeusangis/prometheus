@@ -1,14 +1,17 @@
-import { useParams } from "@tanstack/react-router";
+import { Navigate, useParams } from "@tanstack/react-router";
 
+/**
+ * Legacy route. The truthful applicant profile lives at /profile/$candidateId,
+ * so this keeps old links working instead of rendering a placeholder screen.
+ */
 export default function CandidateDetail() {
-  useParams({ from: "/candidate/$candidateId" });
+  const { candidateId } = useParams({ from: "/candidate/$candidateId" });
 
   return (
-    <main className="min-h-screen bg-background p-6">
-      <div className="max-w-4xl mx-auto bg-card border border-border rounded-2xl p-6">
-        <h1 className="text-2xl font-bold text-foreground">Candidate Detail</h1>
-        <p className="text-muted-foreground mt-2">Candidate profile overview</p>
-      </div>
-    </main>
+    <Navigate
+      to="/profile/$candidateId"
+      params={{ candidateId }}
+      replace
+    />
   );
 }

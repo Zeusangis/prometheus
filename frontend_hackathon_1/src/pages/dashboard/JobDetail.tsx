@@ -228,9 +228,6 @@ export default function JobDetail() {
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <button className="rounded-2xl border border-border bg-card px-5 py-3 text-sm font-semibold text-primary hover:border-primary">
-                  Edit Job Description
-                </button>
                 <button
                   onClick={() => {
                     setCopyFeedback("idle");
@@ -289,14 +286,6 @@ export default function JobDetail() {
                   Recent Applicants
                 </h2>
 
-                <div className="flex items-center gap-2">
-                  <button className="grid h-10 w-10 place-items-center rounded-xl border border-border bg-card text-muted-foreground hover:text-foreground">
-                    <span>⌄</span>
-                  </button>
-                  <button className="grid h-10 w-10 place-items-center rounded-xl border border-border bg-card text-muted-foreground hover:text-foreground">
-                    <span>☰</span>
-                  </button>
-                </div>
               </div>
 
               <div className="space-y-3">
@@ -396,6 +385,13 @@ export default function JobDetail() {
                           </span>
                           <p className="mt-2 text-xs text-muted-foreground">
                             Analysis: {toStatusLabel(applicant.analysis_status)}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            ATS evidence:{" "}
+                            {applicant.ats_score === null ||
+                            applicant.ats_score === undefined
+                              ? "not measured"
+                              : `${applicant.ats_score} / 100`}
                           </p>
                         </div>
 

@@ -1,3 +1,14 @@
+# Analysis states are tracked separately from recruiting stages; never conflate them.
+ANALYSIS_STATUSES = (
+    "queued",
+    "running",
+    "complete",
+    "partial",
+    "failed",
+    "enqueue_failed",
+)
+RETRYABLE_ANALYSIS = ("failed", "enqueue_failed", "partial")
+
 STAGES = (
     "screening",
     "interview_scheduled",
