@@ -1,116 +1,131 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { Link, useParams } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Sidebar } from "../../components/Sidebar";
 import { Header } from "../../components/Header";
-import ResumeSection from "./ResumeSection";
-import { getCandidateProfile } from "../../api/apply";
-import type { ResumeAnalysisData } from "./ResumeSection";
+import ResumeSection, { formatDate, formatLabel } from "./ResumeSection";
+import GitHubSection from "./GitHubSection";
+import {
+  getCandidateAnalysis,
+  getCandidateProfile,
+  retryCandidateAnalysis,
+} from "../../api/apply";
+import { moveCandidateToNextStep } from "../../api/jobs";
 
 const PROFILE_TABS = [
   "Overview",
   "Resume",
-  "Verified Skills",
-  "Interview Summary",
+  "GitHub Evidence",
   "Scores & Analysis",
 ] as const;
 
-const skills = [
-  { name: "Figma & Prototyping", score: 98 },
-  { name: "Design Systems", score: 95 },
-  { name: "React / Tailwind CSS", score: 82 },
-  { name: "User Research", score: 88 },
-];
-
-const archetypes = [
-  "Figma Expert",
-  "System Thinker",
-  "Growth Focused",
-  "Technical Hybrid",
-  "Strategic Lead",
-];
-
-const resumeAnalysisData: ResumeAnalysisData = {
-  ats_score: 75,
-  breakdown: {
-    achievements: 6,
-    completeness: 9,
-    education: 9,
-    experience_relevance: 12,
-    formatting: 9,
-    keyword_match: 18,
-    skills_alignment: 12,
-  },
-  final_verdict:
-    "This is a strong entry-level resume for a student, highlighted by a perfect GPA and relevant projects. The candidate demonstrates proficiency in the Python ecosystem. However, to pass more rigorous ATS filters for Backend or Data Science roles, the candidate must add database-related keywords (SQL) and focus on demonstrating the measurable impact of their technical projects.",
-  missing_keywords: [
-    "SQL",
-    "PostgreSQL",
-    "Git",
-    "Docker",
-    "REST API",
-    "Unit Testing",
-    "Agile",
-    "CI/CD",
-    "AWS",
-    "PyTorch",
-    "NoSQL",
-  ],
-  projects: [
-    "Data Augmentation on Geospatial Data",
-    "Exploring Patterns in Mobile Data for Smarter Decisions",
-    "AI Fitness Chatbot",
-  ],
-  top_improvements: [
-    "Include SQL and specific database names like PostgreSQL or MongoDB in the skills section.",
-    "Quantify project results, such as 'Increased data processing speed by 30% through multithreading'.",
-    "Add version control tools like Git and GitHub explicitly under 'Libraries & Tools'.",
-    "Reframe Helpdesk duties to emphasize any automation or scripting performed.",
-    "Expand the 'Backend Developer Intern' section with more specific technologies used for caching and database design.",
-  ],
-  weak_areas: [
-    "Short duration of the primary technical internship (3 months).",
-    "IT Helpdesk experience is support-oriented rather than development-oriented.",
-    "Lack of quantifiable metrics (percentages, time saved) in the project descriptions.",
-    "Missing fundamental database management keywords like SQL.",
-  ],
+const STAGE_BADGE: Record<string, string> = {
+  screening: "bg-secondary text-primary-dark",
+  interview_scheduled: "bg-[#daf2e2] text-[#246747]",
+  interview_completed: "bg-[#dcecff] text-[#254f8d]",
+  offer_made: "bg-[#efe6ff] text-[#4f3a9e]",
+  hired: "bg-[#d8f6e4] text-[#1c7f4d]",
+  rejected: "bg-[#ffe3e0] text-[#9a3530]",
 };
 
-const interviewSummary = {
-  score: 9.2,
-  scoreLabel: "Exceptional",
-  title: "Exceptional Technical Leadership",
-  summary:
-    "Jane demonstrates outstanding mastery of design systems and architectural thinking. Her ability to articulate complex design decisions during the system design phase. Her ability to articulate the gap between component flexibility and performance optimization was world class.",
-  lastInterview: "Oct 24, 2023",
-  keyStrengths: [
-    "Mastery of Design System tokens and React implementation",
-    "Strong empathetic communication during stakeholder displays",
-    "Proven track record of scaling high-performance teams",
-  ],
-  areasForImprovement: [
-    "Could refine data-driven storytelling in executive presentations",
-    "Exploration of AI-integrated design workflows is still early",
-  ],
-  hiringRecommendation: {
-    status: "Strong Hire",
-    role: "Design Principal role with immediate onboarding.",
-    support: "Unanimous Support",
-  },
-};
+const TERMINAL_STAGES = new Set(["hired", "rejected"]);
+const RETRYABLE_ANALYSIS = new Set(["failed", "enqueue_failed", "partial"]);
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 break-words text-sm font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function Panel({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <article className="rounded-2xl border border-border bg-card p-5">
+      <h2 className="text-lg font-semibold">{title}</h2>
+      <div className="mt-3 space-y-3 text-sm">{children}</div>
+    </article>
+  );
+}
 
 export default function ProfilePage() {
   const { candidateId } = useParams({ from: "/profile/$candidateId" });
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] =
     useState<(typeof PROFILE_TABS)[number]>("Overview");
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [pendingStage, setPendingStage] = useState<string | null>(null);
 
-  const { data: candidateData } = useQuery({
+  const profileQuery = useQuery({
     queryKey: ["candidate", candidateId],
     queryFn: () => getCandidateProfile(candidateId),
   });
 
-  const candidateName =
-    candidateData?.full_name || candidateData?.name || "Jane Sutherland";
+  const analysisQuery = useQuery({
+    queryKey: ["candidate-analysis", candidateId],
+    queryFn: () => getCandidateAnalysis(candidateId),
+  });
+
+  const candidate = profileQuery.data;
+  const analysis = analysisQuery.data;
+
+  const retryMutation = useMutation({
+    mutationFn: () => retryCandidateAnalysis(candidateId),
+    onSuccess: async () => {
+      setActionError(null);
+      await queryClient.invalidateQueries({
+        queryKey: ["candidate-analysis", candidateId],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["candidate", candidateId],
+      });
+    },
+    onError: (error) =>
+      setActionError(errorMessage(error, "Analysis retry could not be queued.")),
+  });
+
+  const stageMutation = useMutation({
+    mutationFn: (nextStatus: string) =>
+      moveCandidateToNextStep({
+        jobId: String(candidate?.job_id ?? ""),
+        candidateId: candidate?.id ?? 0,
+        nextStatus,
+      }),
+    onSuccess: async () => {
+      setPendingStage(null);
+      setActionError(null);
+      await queryClient.invalidateQueries({
+        queryKey: ["candidate", candidateId],
+      });
+    },
+    onError: (error) => {
+      setPendingStage(null);
+      setActionError(errorMessage(error, "Stage change failed."));
+    },
+  });
+
+  const canChangeStage = Boolean(candidate && candidate.job_id !== null);
+  const nextStage = candidate?.allowed_actions.find(
+    (action) => action !== "rejected",
+  );
+  const canReject = Boolean(candidate?.allowed_actions.includes("rejected"));
+  const analysisIsRetryable = Boolean(
+    analysis && RETRYABLE_ANALYSIS.has(analysis.status),
+  );
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -121,352 +136,332 @@ export default function ProfilePage() {
 
         <main className="px-4 pb-8 pt-4 md:px-6">
           <div className="mx-auto max-w-6xl space-y-5">
-            <section className="rounded-3xl border border-[#e1e6e3] bg-[#f7f9f8] p-4 sm:p-5">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="flex items-center gap-3">
-                  <div>
-                    <h1 className="text-3xl font-semibold leading-tight text-foreground">
-                      {candidateName}
-                    </h1>
-                    <p className="mt-1 text-base text-[#425349]">
-                      Senior UI/UX Designer • London, United Kingdom
-                    </p>
-                    <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
-                      <span className="rounded-full bg-[#cdebd8] px-2 py-1 text-[#0f6c45]">
-                        High Match
-                      </span>
-                      <span className="rounded-full bg-[#daf2e2] px-2 py-1 text-[#246747]">
-                        Verification Complete
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Link
-                    to="/profile/$candidateId/interview-summary"
-                    params={{ candidateId }}
-                    className="rounded-xl border border-[#d4dfd9] bg-white px-4 py-2 text-sm font-semibold text-[#37443d]"
-                  >
-                    Interview Summary Page
-                  </Link>
-                  <button className="rounded-xl border border-[#d4dfd9] bg-white px-4 py-2 text-sm font-semibold text-[#37443d]">
-                    Share Profile
-                  </button>
-                  <button className="rounded-xl bg-[#ffd9d6] px-4 py-2 text-sm font-semibold text-[#9a3530]">
-                    Reject
-                  </button>
-                  <button className="rounded-xl bg-[#0f6c45] px-4 py-2 text-sm font-semibold text-white">
-                    Move to Next Stage
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-6 flex flex-wrap gap-5 border-b border-[#dfe7e2] pb-3 text-sm">
-                {PROFILE_TABS.map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`font-medium ${
-                      tab === activeTab
-                        ? "border-b-2 border-[#0f6c45] pb-2 text-[#0f6c45]"
-                        : "text-[#5b6a62]"
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            {activeTab === "Resume" ? (
-              <ResumeSection data={resumeAnalysisData} />
-            ) : activeTab === "Interview Summary" ? (
-              <section className="grid grid-cols-1 gap-5 xl:grid-cols-[2fr_1fr]">
-                {/* Interview Summary with Score */}
-                <div className="flex flex-col gap-5">
-                  <article className="flex flex-col gap-6 rounded-3xl border border-[#e1e6e3] bg-[#f8faf9] p-6 sm:flex-row sm:items-start">
-                    <div className="flex shrink-0 flex-col items-center gap-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#0f6c45]">
-                        Overall Score
+            {profileQuery.isLoading ? (
+              <p className="rounded-2xl border border-border bg-card px-4 py-5 text-sm text-muted-foreground">
+                Loading candidate…
+              </p>
+            ) : profileQuery.error ? (
+              <p
+                role="alert"
+                className="rounded-2xl border border-[#ffe3e0] bg-[#fff6f5] px-4 py-5 text-sm text-[#9a3530]"
+              >
+                {errorMessage(
+                  profileQuery.error,
+                  "Failed to load this candidate.",
+                )}
+              </p>
+            ) : candidate ? (
+              <>
+                <section className="rounded-3xl border border-border bg-card p-4 sm:p-5">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div className="min-w-0">
+                      <h1 className="break-words text-3xl font-semibold leading-tight text-foreground">
+                        {candidate.full_name || `Candidate #${candidate.id}`}
+                      </h1>
+                      <p className="mt-1 break-words text-base text-muted-foreground">
+                        {candidate.email || "No email on record"} ·{" "}
+                        {candidate.filename || "No resume file"}
                       </p>
-                      <div className="mt-2 flex h-24 w-24 items-center justify-center rounded-full border-4 border-[#dff0e5] bg-[#f0f5f2]">
-                        <div className="text-center">
-                          <p className="text-3xl font-bold text-[#0f6c45]">
-                            {interviewSummary.score}
-                          </p>
-                          <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-[#5b7a68]">
-                            {interviewSummary.scoreLabel}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex-1">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#0f6c45]">
-                        Interview Summary
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        GitHub entity:{" "}
+                        {candidate.github_username
+                          ? `@${candidate.github_username}`
+                          : "not provided"}
                       </p>
-                      <h3 className="mt-3 text-2xl font-semibold text-[#1d2a23]">
-                        {interviewSummary.title}
-                      </h3>
-                      <p className="mt-2 text-sm text-[#5b6a62]">
-                        {interviewSummary.summary}
-                      </p>
-                      <p className="mt-3 text-xs text-[#7d8b83]">
-                        Last Interview: {interviewSummary.lastInterview}
-                      </p>
-                    </div>
-                  </article>
-
-                  {/* Key Strengths */}
-                  <article className="rounded-3xl border border-[#e1e6e3] bg-[#f8faf9] p-6">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#0f6c45]">
-                      Key Strengths
-                    </p>
-                    <ul className="mt-4 space-y-3">
-                      {interviewSummary.keyStrengths.map((strength, idx) => (
-                        <li
-                          key={idx}
-                          className="flex gap-3 text-sm text-[#2f3b34]"
-                        >
-                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#0f6c45]" />
-                          <span>{strength}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </article>
-
-                  {/* Areas for Improvement */}
-                  <article className="rounded-3xl border border-[#e1e6e3] bg-[#f8faf9] p-6">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#213229]">
-                      Areas for Improvement
-                    </p>
-                    <ul className="mt-4 space-y-3">
-                      {interviewSummary.areasForImprovement.map((area, idx) => (
-                        <li
-                          key={idx}
-                          className="flex gap-3 text-sm text-[#2f3b34]"
-                        >
-                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#d4dfd9]" />
-                          <span>{area}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </article>
-
-                  {/* Hiring Recommendation */}
-                  <article className="rounded-3xl bg-[#0f6c45] p-6 text-white">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.2em]">
-                          Hiring Recommendation
-                        </p>
-                        <h3 className="mt-3 text-2xl font-bold">
-                          {interviewSummary.hiringRecommendation.status}
-                        </h3>
-                        <p className="mt-2 text-sm">
-                          Recommended for{" "}
-                          {interviewSummary.hiringRecommendation.role}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-xs font-semibold uppercase tracking-[0.15em]">
-                          {interviewSummary.hiringRecommendation.support}
-                        </p>
-                      </div>
-                    </div>
-                  </article>
-                </div>
-
-                {/* Right Sidebar */}
-                <div className="space-y-5">
-                  <article className="rounded-3xl border border-[#e1e6e3] bg-[#f8faf9] p-6">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#213229]">
-                      Contact & Links
-                    </p>
-                    <div className="mt-4 space-y-4 text-sm">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.15em] text-[#7d8b83]">
-                          Email
-                        </p>
-                        <p className="mt-1 font-semibold">jane.s@design.io</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.15em] text-[#7d8b83]">
-                          Portfolio
-                        </p>
-                        <p className="mt-1 font-semibold">sutherland.design</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-[0.15em] text-[#7d8b83]">
-                          Social
-                        </p>
-                        <p className="mt-1 font-semibold">
-                          LinkedIn • GitHub • Dribbble
-                        </p>
-                      </div>
-                    </div>
-                  </article>
-
-                  <article className="rounded-3xl border border-[#e1e6e3] bg-[#f8faf9] p-6">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#213229]">
-                      Candidate Archetype
-                    </p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {archetypes.map((tag, idx) => (
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold">
                         <span
-                          key={tag}
-                          className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                            idx < 2
-                              ? "bg-[#dff0e5] text-[#0f6c45]"
-                              : "bg-[#ecefef] text-[#4d5a53]"
+                          className={`rounded-full px-2 py-1 ${
+                            STAGE_BADGE[candidate.status] ??
+                            "bg-secondary text-primary-dark"
                           }`}
                         >
-                          {tag}
+                          {formatLabel(candidate.status)}
                         </span>
-                      ))}
-                    </div>
-                  </article>
-
-                  <article className="rounded-3xl border border-[#e1e6e3] bg-[#f8faf9] p-6">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#213229]">
-                      Engagement Score
-                    </p>
-
-                    <div className="mx-auto mt-5 grid h-36 w-36 place-items-center rounded-full border-10 border-[#d8e6df] border-t-[#0f6c45]">
-                      <div className="text-center">
-                        <p className="text-4xl font-bold text-[#1d2a23]">9.0</p>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6b7b72]">
-                          Exceptional
-                        </p>
+                        <span className="rounded-full bg-secondary px-2 py-1 text-primary-dark">
+                          Analysis: {formatLabel(candidate.analysis_status)}
+                        </span>
                       </div>
                     </div>
 
-                    <p className="mt-4 text-center text-sm text-[#5a6a61]">
-                      Jane has completed all preliminary screening rounds with
-                      top-tier scores in communication.
-                    </p>
-                  </article>
-                </div>
-              </section>
-            ) : (
-              <section className="grid grid-cols-1 gap-5 xl:grid-cols-[2fr_1fr]">
-                <article className="rounded-3xl border border-[#e1e6e3] bg-[#f8faf9] p-6">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#0f6c45]">
-                    AI Candidate Summary
-                  </p>
-                  <p className="mt-4 text-2xl leading-relaxed text-[#27342d]">
-                    "Jane stands out as a rare 98% match due to her extensive
-                    experience scaling design systems at Stripe and Dropbox. Her
-                    GitHub contributions show a deep technical understanding of
-                    React-based component libraries, bridging the gap between
-                    high-end UI craft and scalable production code. She is
-                    uniquely suited for the Design Principal role."
-                  </p>
-                </article>
-
-                <article className="rounded-3xl border border-[#e1e6e3] bg-[#f8faf9] p-6">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#213229]">
-                    Contact & Links
-                  </p>
-                  <div className="mt-4 space-y-4 text-sm">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.15em] text-[#7d8b83]">
-                        Email
-                      </p>
-                      <p className="mt-1 font-semibold">jane.s@design.io</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.15em] text-[#7d8b83]">
-                        Portfolio
-                      </p>
-                      <p className="mt-1 font-semibold">sutherland.design</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.15em] text-[#7d8b83]">
-                        Social
-                      </p>
-                      <p className="mt-1 font-semibold">
-                        LinkedIn • GitHub • Dribbble
-                      </p>
-                    </div>
-                  </div>
-                </article>
-
-                <div className="space-y-5">
-                  <article className="rounded-3xl border border-[#e1e6e3] bg-[#f8faf9] p-6">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#213229]">
-                      Candidate Archetype
-                    </p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {archetypes.map((tag, idx) => (
-                        <span
-                          key={tag}
-                          className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                            idx < 2
-                              ? "bg-[#dff0e5] text-[#0f6c45]"
-                              : "bg-[#ecefef] text-[#4d5a53]"
-                          }`}
+                    <div className="flex flex-wrap gap-2">
+                      {canChangeStage && nextStage ? (
+                        <button
+                          onClick={() => {
+                            setActionError(null);
+                            setPendingStage(nextStage);
+                          }}
+                          disabled={stageMutation.isPending}
+                          className="rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary-light disabled:cursor-not-allowed disabled:bg-secondary disabled:text-muted-foreground"
                         >
-                          {tag}
+                          Move to {formatLabel(nextStage)}
+                        </button>
+                      ) : null}
+                      {canChangeStage && canReject ? (
+                        <button
+                          onClick={() => {
+                            setActionError(null);
+                            setPendingStage("rejected");
+                          }}
+                          disabled={stageMutation.isPending}
+                          className="rounded-xl bg-[#ffd9d6] px-4 py-2 text-sm font-semibold text-[#9a3530] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Reject
+                        </button>
+                      ) : null}
+                      {TERMINAL_STAGES.has(candidate.status) ? (
+                        <span className="rounded-xl border border-border px-4 py-2 text-sm text-muted-foreground">
+                          {formatLabel(candidate.status)} is a terminal stage.
                         </span>
-                      ))}
+                      ) : null}
                     </div>
-                  </article>
-
-                  <article className="rounded-3xl border border-[#e1e6e3] bg-[#f8faf9] p-6">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#213229]">
-                      Engagement Score
-                    </p>
-
-                    <div className="mx-auto mt-5 grid h-36 w-36 place-items-center rounded-full border-10 border-[#d8e6df] border-t-[#0f6c45]">
-                      <div className="text-center">
-                        <p className="text-4xl font-bold text-[#1d2a23]">9.0</p>
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6b7b72]">
-                          Exceptional
-                        </p>
-                      </div>
-                    </div>
-
-                    <p className="mt-4 text-center text-sm text-[#5a6a61]">
-                      Jane has completed all preliminary screening rounds with
-                      top-tier scores in communication.
-                    </p>
-                  </article>
-                </div>
-
-                <article className="rounded-3xl border border-[#e1e6e3] bg-[#f8faf9] p-6 xl:col-span-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#0f6c45]">
-                      Verified Proficiency Heatmap
-                    </p>
-                    <p className="text-xs text-[#607066]">
-                      ● GitHub Signal • ● AI Assessment
-                    </p>
                   </div>
 
-                  <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {skills.map((skill) => (
-                      <div key={skill.name}>
-                        <div className="mb-1 flex items-center justify-between text-sm">
-                          <p className="font-medium text-[#2f3b34]">
-                            {skill.name}
-                          </p>
-                          <p className="font-semibold text-[#0f6c45]">
-                            {skill.score}%
-                          </p>
-                        </div>
-                        <div className="h-2 rounded-full bg-[#deebe4]">
-                          <div
-                            className="h-2 rounded-full bg-[#0f6c45]"
-                            style={{ width: `${skill.score}%` }}
-                          />
-                        </div>
-                      </div>
+                  {actionError ? (
+                    <p
+                      role="alert"
+                      className="mt-3 rounded-xl border border-[#ffe3e0] bg-[#fff6f5] px-4 py-3 text-sm text-[#9a3530]"
+                    >
+                      {actionError}
+                    </p>
+                  ) : null}
+
+                  {pendingStage ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-[#d4dfd9] bg-secondary/40 px-4 py-3 text-sm">
+                      <span>
+                        Confirm server-authorized stage change to{" "}
+                        <strong>{formatLabel(pendingStage)}</strong> for{" "}
+                        {candidate.full_name || `candidate #${candidate.id}`}?
+                      </span>
+                      <button
+                        onClick={() => stageMutation.mutate(pendingStage)}
+                        disabled={stageMutation.isPending}
+                        className="rounded-lg bg-primary px-3 py-1.5 font-semibold text-primary-foreground disabled:opacity-60"
+                      >
+                        {stageMutation.isPending ? "Moving…" : "Confirm"}
+                      </button>
+                      <button
+                        onClick={() => setPendingStage(null)}
+                        className="rounded-lg border border-border px-3 py-1.5 font-semibold"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-5 flex flex-wrap gap-5 border-b border-border pb-3 text-sm">
+                    {PROFILE_TABS.map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab)}
+                        className={`font-medium ${
+                          tab === activeTab
+                            ? "border-b-2 border-primary pb-2 text-primary"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {tab}
+                      </button>
                     ))}
                   </div>
-                </article>
-              </section>
+                </section>
+
+                {analysisQuery.isLoading ? (
+                  <p className="rounded-2xl border border-border bg-card px-4 py-5 text-sm text-muted-foreground">
+                    Loading saved analysis…
+                  </p>
+                ) : analysisQuery.error ? (
+                  <p
+                    role="alert"
+                    className="rounded-2xl border border-[#ffe3e0] bg-[#fff6f5] px-4 py-5 text-sm text-[#9a3530]"
+                  >
+                    {errorMessage(
+                      analysisQuery.error,
+                      "Failed to load saved analysis.",
+                    )}
+                  </p>
+                ) : null}
+
+                {activeTab === "Overview" ? (
+                  <section className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                    <Panel title="Submission">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <Field
+                          label="Full name"
+                          value={candidate.full_name || "Not recorded"}
+                        />
+                        <Field
+                          label="Email"
+                          value={candidate.email || "Not recorded"}
+                        />
+                        <Field
+                          label="GitHub entity"
+                          value={
+                            candidate.github_username
+                              ? `@${candidate.github_username}`
+                              : "Not provided"
+                          }
+                        />
+                        <Field
+                          label="Resume file"
+                          value={candidate.filename || "Not recorded"}
+                        />
+                        <Field
+                          label="Submitted"
+                          value={formatDate(candidate.uploaded_at)}
+                        />
+                        <Field
+                          label="Analysis status"
+                          value={formatLabel(candidate.analysis_status)}
+                        />
+                      </div>
+                      {candidate.job_id !== null ? (
+                        <Link
+                          to="/dashboard/$jobId"
+                          params={{ jobId: String(candidate.job_id) }}
+                          className="inline-block font-semibold text-primary hover:text-primary-light"
+                        >
+                          View job {candidate.job_id}
+                        </Link>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          This candidate is not linked to a job, so stage
+                          changes are unavailable.
+                        </p>
+                      )}
+                    </Panel>
+
+                    <Panel title="Analysis and review">
+                      <p className="text-muted-foreground">
+                        Resume and GitHub results are independent provider
+                        evidence for human review. This profile never shows
+                        invented scores, skills, or recommendations.
+                      </p>
+                      <p>
+                        Overall status:{" "}
+                        <strong>
+                          {analysis
+                            ? formatLabel(analysis.status)
+                            : "No saved analysis"}
+                        </strong>
+                      </p>
+                      {analysis?.error_message ? (
+                        <p
+                          role="status"
+                          className="rounded-lg bg-secondary p-3 text-muted-foreground"
+                        >
+                          {analysis.error_message}
+                        </p>
+                      ) : null}
+                      {analysisIsRetryable ? (
+                        <div className="space-y-2">
+                          <button
+                            onClick={() => retryMutation.mutate()}
+                            disabled={retryMutation.isPending}
+                            className="rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground disabled:opacity-60"
+                          >
+                            {retryMutation.isPending
+                              ? "Queueing…"
+                              : "Retry failed analysis"}
+                          </button>
+                          <p className="text-xs text-muted-foreground">
+                            Retry re-queues only the components that are not
+                            complete; completed results are preserved.
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Retry is offered only for failed, enqueue_failed or
+                          partial analysis.
+                        </p>
+                      )}
+                    </Panel>
+                  </section>
+                ) : null}
+
+                {activeTab === "Resume" ? (
+                  <ResumeSection data={analysis?.resume ?? null} />
+                ) : null}
+
+                {activeTab === "GitHub Evidence" ? (
+                  <GitHubSection
+                    data={analysis?.github ?? null}
+                    requested={Boolean(
+                      candidate.github_username || analysis?.github,
+                    )}
+                  />
+                ) : null}
+
+                {activeTab === "Scores & Analysis" ? (
+                  <section className="space-y-4">
+                    <Panel title="Resume ATS evidence">
+                      <p>
+                        {analysis?.resume?.status === "complete" &&
+                        analysis.resume.ats_score !== null
+                          ? `${analysis.resume.ats_score} / 100`
+                          : "Not measured"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Resume ATS score from the saved job-aware analysis.
+                      </p>
+                    </Panel>
+
+                    <Panel title="Sampled repository scores">
+                      {analysis?.github?.repositories.length ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-80 border-collapse text-left">
+                            <thead>
+                              <tr className="text-xs uppercase tracking-[0.15em] text-muted-foreground">
+                                <th className="py-2">Repository</th>
+                                <th className="py-2">Score</th>
+                                <th className="py-2">Enabled weight covered</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {analysis.github.repositories.map((repo) => {
+                                const coverage =
+                                  repo.metrics?.aggregation?.weight_coverage;
+                                return (
+                                  <tr
+                                    key={repo.repo_name}
+                                    className="border-t border-border"
+                                  >
+                                    <td className="break-words py-2 pr-3 text-sm">
+                                      {repo.repo_name}
+                                    </td>
+                                    <td className="py-2 pr-3 text-sm font-semibold">
+                                      {repo.score === null
+                                        ? "Not scored"
+                                        : `${repo.score} / 100`}
+                                    </td>
+                                    <td className="py-2 text-sm">
+                                      {coverage == null
+                                        ? "Not measured"
+                                        : `${Math.round(coverage * 100)}%`}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          No repository scores are saved for this candidate.
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground">
+                        Resume ATS scores and sampled repository scores are
+                        unrelated scales and are never combined into a single
+                        candidate score or ranking.
+                      </p>
+                    </Panel>
+                  </section>
+                ) : null}
+              </>
+            ) : (
+              <p className="rounded-2xl border border-border bg-card px-4 py-5 text-sm text-muted-foreground">
+                No candidate data is available.
+              </p>
             )}
           </div>
         </main>

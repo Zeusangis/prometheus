@@ -28,6 +28,7 @@ Hiring pipeline
 - Bounded public GitHub and repository analysis with attributable evidence
 - Weighted technical metrics with transparent score coverage and missing-evidence handling
 - Independent resume and GitHub components with durable results, partial states, and retry support
+- Candidate evidence profiles backed only by persisted results, with explicit pending, failed, partial and not-requested states
 - Asynchronous processing with Celery and Redis
 - Recruiter authentication, CSRF protection, and organization-scoped data access
 - Candidate listing, pipeline management, and recruiting/analysis status separation
@@ -160,7 +161,8 @@ TrueHire is designed for bounded, reviewable evidence:
 - GitHub evidence is limited by request count, time, repository count, file size, and sampled content; raw repository code is not persisted.
 - Candidate-attributed commits are scoped to the analyzed repositories, default branches, and sampling window. They are not lifetime contribution counts or identity verification.
 - Missing evidence remains `null` rather than being converted into an invented zero.
-- Recruiting stages are never advanced by provider output or analysis failures.
+- Recruiting stages are never advanced by provider output or analysis failures, and the client offers only the stage actions the server reports as allowed.
+- The candidate profile renders only saved analysis: it never fabricates scores, skills, contact details or recommendations, and it keeps resume ATS evidence, sampled repository scores and recruiting stages separate.
 - Recruiter mutations require authenticated organization membership and CSRF protection. Sessions use HTTP-only, SameSite cookies.
 - Local file uploads are intended for development. Production requires controlled object storage, retention/deletion policies, access control, rate limiting, and provider verification.
 
@@ -168,6 +170,6 @@ Do not use the application with real candidate data until the remaining producti
 
 ## Project status
 
-Core job management, applications, authentication, persistence, background processing, resume analysis, GitHub analysis, candidate pipelines, and CI are implemented. Candidate intelligence screens and a secure live AI interview workflow remain under development.
+Core job management, applications, authentication, persistence, background processing, resume analysis, GitHub analysis, candidate pipelines, the persisted candidate evidence profile, and CI are implemented. The interview-summary screen, remaining prototype dashboard screens and a secure live AI interview workflow remain under development.
 
 For implementation details and known limitations, see [`docs/engineering-audit.md`](docs/engineering-audit.md).

@@ -155,6 +155,52 @@ Live GitHub/Gemini analysis, PostgreSQL and hosted CI are unverified. Public evi
 
 Wire truthful candidate/profile screens to persisted resume/GitHub evidence and statuses, then continue secure interview migration and deployment/privacy hardening. Push each verified coherent checkpoint.
 
+## Phase 8 checkpoint — 2026-10-06
+
+### PHASE
+
+Truthful candidate profile wired to persisted resume and GitHub evidence.
+
+### COMPLETED
+
+- Removed every mock from the candidate profile: no fabricated name, location, contact links, archetypes, engagement score, verified-skill heatmap, match/verification badges, AI summary, "last scanned" timestamp, or demo footer.
+- The profile renders only saved data from the authenticated candidate and analysis endpoints: real name, email, GitHub entity, resume filename, submission time, recruiting stage, and analysis status.
+- Tabs are Overview, Resume, GitHub Evidence and Scores & Analysis. Resume ATS evidence and sampled repository scores are shown as unrelated scales that are never combined into one candidate score or ranking.
+- Resume and GitHub components render explicit pending/running/complete/partial/failed/not-requested states, provider messages, weight coverage, fork caution, cited sampled files, commit provenance, authorship caveat, and sampling limits.
+- Dead Share/Reject/Move buttons were replaced by real server-authorized stage actions: the client offers only `allowed_actions`, confirms before moving, surfaces transition errors, and states when a stage is terminal.
+- Retry is offered only for failed, enqueue_failed and partial analysis, calls the existing retry endpoint with CSRF protection, and invalidates the profile and analysis queries; completed components stay preserved server-side.
+- Loading, error, empty and not-found states are explicit; a candidate without a linked job states that stage changes are unavailable. The profile no longer links to the still-mocked interview summary screen.
+
+### FILES CHANGED
+
+[ProfilePage](../frontend_hackathon_1/src/pages/dashboard/ProfilePage.tsx) rewritten; it consumes the [analysis types and fetchers](../frontend_hackathon_1/src/api/apply.ts), [ResumeSection](../frontend_hackathon_1/src/pages/dashboard/ResumeSection.tsx) and [GitHubSection](../frontend_hackathon_1/src/pages/dashboard/GitHubSection.tsx) added earlier in this phase; README and this audit.
+
+### DATABASE MIGRATIONS
+
+None. No schema change: `c840ab218f12` remains the head migration and the full-suite migration/schema-drift tests are unaffected.
+
+### VERIFICATION RUN
+
+`npm run typecheck` and `npm run build` pass (both exit status 0). No backend file changed in this phase, so the backend 151-case pytest suite and Ruff were not re-run; their last verified result stands for the unchanged backend. Browser verification used an isolated migrated SQLite database served from outside the repository: only `GitHubClient.get` (canned HTTP responses) and the two Gemini `generate_json` entry points were replaced, so the real collector, weighting, validation, persistence, auth guard and stage logic executed.
+
+### MANUAL SMOKE TEST
+
+Real Chromium against a Vite dev server on port 5183 (proxy to the harness on port 5000), signed in as a seeded recruiter:
+
+- Candidate applied through the real public endpoint with a GitHub username: profile shows the true name/email/filename, "Screening", "Analysis: Complete", resume 68/100 with all seven categories, verdict and four evidence lists, plus GitHub evidence for three repositories (67.67/100 at 90% weight coverage, 23.38/100 at 80%, 0/100 at 20%) with cited files, fork caution and provenance details.
+- Candidate without a GitHub username: "Analysis: Failed", resume failed with the safe provider message and no score, GitHub tab "Not requested", retry offered. Clicking retry issued `POST /api/candidates/3/analysis/retry` (202) and refetched both queries; the component stayed failed with no invented score.
+- Persisted queued candidate with pending components: "Analysis: Queued", resume "Pending" with "No score has been produced yet", retry correctly withheld.
+- "Move to Interview Scheduled" showed a confirmation, then moved the candidate: badge "Interview Scheduled", next action "Move to Interview Completed", analysis still Complete, and both the API and the job applicant list reported `interview_scheduled`. Anonymous `GET /api/candidates/2/analysis` returned 401 `authentication_required`.
+- No console errors or failed requests. No mock string (for example "Jane Sutherland", "High Match", "Figma Expert", "9.0", or the portfolio/engagement/archetype blocks) remained in the rendered profile.
+
+### KNOWN LIMITATIONS
+
+Live Gemini/GitHub calls, PostgreSQL and hosted CI remain unverified; the harness stubs GitHub HTTP transport instead of calling GitHub for real, and the resume provider output is canned. `/profile/$candidateId/interview-summary` still renders demo interview data and is no longer linked from the profile until the interview phase replaces it. No automated frontend test runner exists, so profile behaviour rests on typecheck/build plus manual browser checks. Candidate listing and dashboard screens still contain prototype content, and deployment hardening (rate limits, storage, privacy, concurrency) is outstanding.
+
+### NEXT PHASE
+
+Replace the interview-summary mock and the remaining prototype dashboard screens with persisted data, then continue interview-session security and deployment/privacy/concurrency hardening. Push each verified coherent checkpoint.
+
 ## Subsequent required work
 
-Authentication + organization ownership/CSRF are implemented in Phase 4; deployment remains blocked on remaining privacy/rate-limit/provider/storage work. Persistent analyses and migrated providers, truthful candidate/interview/dashboard screens, secure interview sessions, privacy/rate limits/storage/audit, Compose, and final end-to-end scenario remain required. Do not treat a green initial CI checkpoint as product completion.
+Authentication + organization ownership/CSRF are implemented in Phase 4; deployment remains blocked on remaining privacy/rate-limit/provider/storage work. Persistent analyses, migrated providers and a truthful, persisted candidate evidence profile (Phase 8) are implemented. The interview-summary and remaining dashboard screens, secure interview sessions, privacy/rate limits/storage/audit, Compose, and the final end-to-end scenario remain required. Do not treat a green initial CI checkpoint as product completion.
