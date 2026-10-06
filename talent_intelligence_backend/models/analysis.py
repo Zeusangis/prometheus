@@ -76,6 +76,6 @@ class RepositoryAnalysis(db.Model):
     __table_args__ = (db.UniqueConstraint("github_analysis_id", "repo_name", name="uq_analysis_repository"),)
 
     def to_dict(self):
-        return {key: getattr(self, key) for key in (
+        return {**{key: getattr(self, key) for key in (
             "repo_name", "repo_url", "primary_language", "score", "metrics", "strengths", "red_flags", "recruiter_summary", "evidence_metadata"
-        )}
+        )}, "pushed_at": self.pushed_at.isoformat() if self.pushed_at else None}

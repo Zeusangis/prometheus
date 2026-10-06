@@ -25,6 +25,11 @@ MIGRATIONS = str(Path(__file__).resolve().parents[1] / "migrations")
 def app(tmp_path, monkeypatch):
     # A developer's local provider key must never make tests call a live service.
     monkeypatch.setenv("GEMINI_API_KEY", "")
+    monkeypatch.setenv("GITHUB_TOKEN", "")
+    from services.github.client import GitHubClient, GitHubUnavailable
+    def offline_evidence(*args, **kwargs):
+        raise GitHubUnavailable("GitHub could not be reached. Retry later.")
+    monkeypatch.setattr(GitHubClient, "get", offline_evidence)
     application = create_app({
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": "sqlite:///" + str(tmp_path / "test.sqlite"),

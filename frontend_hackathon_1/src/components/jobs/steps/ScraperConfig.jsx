@@ -5,10 +5,10 @@ export const METRICS = [
   { key: "languageMatch",     name: "Language match",            description: "Does their GitHub code match the required languages?" },
   { key: "codeQuality",       name: "Code quality",              description: "Readability, structure, and naming conventions" },
   { key: "codeSecurity",      name: "Code security",             description: "Common vulnerabilities and safe coding practices" },
-  { key: "commitConsistency", name: "Commit consistency",        description: "Regular activity and meaningful commit messages" },
+  { key: "commitConsistency", name: "Commit consistency",        description: "Active weeks in a bounded, candidate-attributed 90-day commit sample" },
   { key: "projectComplexity", name: "Project complexity",        description: "Size, depth, and originality of projects" },
-  { key: "openSource",        name: "Open source contributions", description: "PRs, issues, and reviews on public repos" },
-  { key: "testCoverage",      name: "Test coverage",             description: "Presence and quality of tests in their repos" },
+  { key: "openSource",        name: "Open source contributions", description: "PRs, issues, and reviews are not collected yet; this metric stays unscored" },
+  { key: "testCoverage",      name: "Test coverage",             description: "Sampled test evidence only — not measured execution coverage" },
 ];
 
 export default function ScraperConfig({ data, onChange }) {
@@ -24,7 +24,8 @@ export default function ScraperConfig({ data, onChange }) {
       <div className="bg-white border border-gray-100 rounded-2xl p-6">
         <h2 className="text-sm font-semibold text-gray-900">GitHub scraper metrics</h2>
         <p className="text-xs text-gray-400 mt-0.5 mb-4">
-          Toggle metrics on or off and adjust how much each one affects the overall score.
+          Toggle metrics and set their relative weights. Scores use available sampled evidence only;
+          unknown metrics are excluded and weight coverage is reported. Repository code is not proof of individual authorship.
         </p>
 
         {METRICS.map((m) => (

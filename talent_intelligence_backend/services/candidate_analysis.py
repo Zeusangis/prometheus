@@ -1,8 +1,10 @@
 from flask import current_app
 
-from models import Candidate, GitHubAnalysis, ResumeAnalysis, db
+from models import Candidate, GitHubAnalysis, RepositoryAnalysis, ResumeAnalysis, db
 from services.ai.gemini import InvalidProviderOutput, ProviderUnavailable
 from services.resume.analyzer import analyze_resume
+from services.github.analyzer import analyze_github
+from services.github.client import GitHubUnavailable
 
 
 def ensure_records(candidate):
@@ -25,7 +27,7 @@ def overall_status(resume_status, github_status=None):
     statuses = [resume_status] + ([github_status] if github_status is not None else [])
     if all(status == "complete" for status in statuses):
         return "complete"
-    if "complete" in statuses:
+    if "complete" in statuses or "partial" in statuses:
         return "partial"
     return "failed"
 
@@ -76,9 +78,29 @@ def process_analysis(candidate_id, extract_text):
 
     github = candidate.github_analysis
     if github and github.status != "complete":
-        github.status = "failed"
-        github.error_message = "GitHub analysis integration is not available in this checkpoint."
+        github.status = "running"
+        github.error_message = None
         db.session.commit()
+        try:
+            result = analyze_github(candidate.github_username, candidate.job)
+            for key in ("status", "username", "total_public_repos", "total_stars", "candidate_attributed_commits", "summary", "error_message"):
+                setattr(github, key, result[key])
+            # Delete old sampled outputs before replacement to honor repository uniqueness.
+            github.repositories.clear()
+            db.session.flush()
+            github.repositories.extend(RepositoryAnalysis(**repo) for repo in result["repositories"])
+            db.session.commit()
+        except Exception as error:
+            db.session.rollback()
+            current_app.logger.warning("GitHub analysis failed candidate_id=%s type=%s", candidate_id, type(error).__name__)
+            candidate = db.session.get(Candidate, candidate_id)
+            resume, github = candidate.resume_analysis, candidate.github_analysis
+            github.status = "failed"
+            github.error_message = str(error) if isinstance(error, GitHubUnavailable) else "GitHub analysis could not be completed. Retry later."
+            for key in ("total_public_repos", "total_stars", "candidate_attributed_commits", "summary"):
+                setattr(github, key, None)
+            github.repositories.clear()
+            db.session.commit()
     candidate.analysis_status = overall_status(resume.status, github.status if github else None)
     candidate.analysis_error = None if candidate.analysis_status == "complete" else "Some analysis could not be completed. Review component statuses and retry."
     db.session.commit()

@@ -117,6 +117,44 @@ Live Gemini calls, PostgreSQL and hosted CI are unverified. GitHub integration a
 
 Migrate bounded GitHub evidence collection/scoring with candidate-attributed activity, then replace candidate/profile mocks with persisted analyses and explicit unavailable states. Continue verified medium-sized GitHub pushes.
 
+## Phase 7 checkpoint — 2026-10-06
+
+### PHASE
+
+Bounded public GitHub evidence and job-weighted repository analysis.
+
+### COMPLETED
+
+- Adapted prototype public REST pagination, language/tree/file selection and structured evidence review into lazy backend services; no unsafe `main1` app imports.
+- Fixed-origin HTTPS, no redirects, bounded request/response/time budgets, repository/commit/tree/file caps, safe rate-limit/not-found/network/provider outcomes.
+- Public counts and sample scopes are distinct; candidate author login is filtered/verified, commit SHAs deduplicated across forks, unknown totals remain null. No repository history-as-authorship claim.
+- Persisted repository dimensions, normalized enabled metric weights, evidence citations/SHAs/truncation/caveats, partial provider outcomes and independent resume/GitHub retries.
+- Wizard wording now discloses sampled activity, unmeasured coverage, and unsupported PR/issue/review evidence.
+
+### FILES CHANGED
+
+[REST client](../talent_intelligence_backend/services/github/client.py), [collector](../talent_intelligence_backend/services/github/collector.py), [scoring](../talent_intelligence_backend/services/github/analyzer.py), component orchestration and repository serialization; [GitHub regression tests](../talent_intelligence_backend/tests/test_github_analysis.py), offline test fixtures and prior resume expectations; [scraper wizard](../frontend_hackathon_1/src/components/jobs/steps/ScraperConfig.jsx), README and environment template.
+
+### DATABASE MIGRATIONS
+
+None: existing `c840ab218f12` analysis tables support these results. Full-suite migration/schema-drift tests remain passing.
+
+### VERIFICATION RUN
+
+151 pytest cases, Ruff, frontend typecheck/build pass. Initial Ruff found two semicolon-style violations; both corrected and all checks rerun. Verified caps (two repo pages, three analyzed repos, 30 commits, three 4,000-character file excerpts), author-only activity, fork deduplication, invalid citations/scores/config, safe HTTP errors, partial evidence and retry uniqueness/stale cleanup. Tests prevent live GitHub requests or local-key leakage. No performance improvement claim.
+
+### MANUAL SMOKE TEST
+
+Real localhost HTTP with isolated migrated SQLite, mocked GitHub evidence and eager Celery: authenticated job metric configuration, public PDF application, persisted GitHub language score/provenance despite resume parsing failure, unchanged screening stage, protected analysis GET, and retry preserving completed GitHub timestamp/rows pass. This is not live provider or real broker verification.
+
+### KNOWN LIMITATIONS
+
+Live GitHub/Gemini analysis, PostgreSQL and hosted CI are unverified. Public evidence is bounded/default-branch/sample-only; PRs/issues/reviews and measured test coverage are unavailable, missing metrics stay null. No global provider caching/rate budget or concurrent task leases yet. Repository excerpts can still contain sensitive public content despite filename exclusions; stronger redaction/consent policies remain necessary before production use. Candidate/profile mocks still need removal. Full remediation remains incomplete.
+
+### NEXT PHASE
+
+Wire truthful candidate/profile screens to persisted resume/GitHub evidence and statuses, then continue secure interview migration and deployment/privacy hardening. Push each verified coherent checkpoint.
+
 ## Subsequent required work
 
 Authentication + organization ownership/CSRF are implemented in Phase 4; deployment remains blocked on remaining privacy/rate-limit/provider/storage work. Persistent analyses and migrated providers, truthful candidate/interview/dashboard screens, secure interview sessions, privacy/rate limits/storage/audit, Compose, and final end-to-end scenario remain required. Do not treat a green initial CI checkpoint as product completion.

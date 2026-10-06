@@ -58,7 +58,7 @@ def test_job_aware_partial_analysis_and_sequential_redelivery(apply, app, client
     assert result["resume"]["breakdown"]["keyword_match"] == 20
     assert result["github"]["status"] == "failed"
     assert result["github"]["total_stars"] is None
-    assert "not available" in result["github"]["error_message"]
+    assert "could not be reached" in result["github"]["error_message"]
     assert "file_path" not in str(result)
     assert client.post(f"/api/candidates/{candidate_id}/analysis/retry").status_code == 202
     with app.app_context():
