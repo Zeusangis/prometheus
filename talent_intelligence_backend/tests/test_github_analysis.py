@@ -229,7 +229,106 @@ def test_no_successful_repository_evidence_is_failed(job, monkeypatch):
     evidence["repositories"] = []
     evidence["summary"]["errors"] = [{"repo_name": "project", "message": "Rate limit"}]
     monkeypatch.setattr("services.github.analyzer.collect_github", lambda _: evidence)
-    assert analyze_github("test-user", job)["status"] == "failed"
+    result = analyze_github("test-user", job)
+    assert result["status"] == "failed"
+    # A failed status must name the failure rather than staying generic.
+    assert result["error_message"].startswith("GitHub analysis failed:")
+    assert "project" in result["error_message"]
+
+
+def test_partial_reason_names_the_repository_whose_review_failed(job, monkeypatch):
+    monkeypatch.setattr(
+        "services.github.analyzer.collect_github",
+        lambda _: collect_github("test-user", EvidenceClient()),
+    )
+    def fail(*_):
+        raise RuntimeError("secret-key private provider URL")
+    monkeypatch.setattr("services.github.analyzer.generate_json", fail)
+    result = analyze_github("test-user", job)
+    assert result["status"] == "partial"
+    assert "test-user/project" in result["error_message"]
+    assert "AI review" in result["error_message"]
+    assert result["summary"]["review_failures"] == [{
+        "repo_name": "test-user/project",
+        "message": "Repository AI review could not be completed. Retry later.",
+    }]
+    # The provider payload must never reach the recorded reason or the summary.
+    assert "secret-key" not in str(result)
+
+
+def test_partial_reason_names_the_repository_whose_evidence_failed(job, monkeypatch):
+    class PartialClient(EvidenceClient):
+        def get(self, path, *args, **kwargs):
+            if "/bad/" in path:
+                raise GitHubUnavailable("GitHub access or rate limit prevented analysis. Retry later.")
+            return super().get(path, *args, **kwargs)
+    # No qualitative metric is enabled, so the only possible failure is collection.
+    job.scraper_config["scraperMetrics"] = {key: {"enabled": False, "weight": 50} for key in METRICS}
+    monkeypatch.setattr(
+        "services.github.analyzer.collect_github",
+        lambda _: collect_github("test-user", PartialClient([repository("bad"), repository("good")])),
+    )
+    result = analyze_github("test-user", job)
+    assert result["status"] == "partial"
+    assert "could not be collected for bad" in result["error_message"]
+    assert [item["repo_name"] for item in result["summary"]["errors"]] == ["bad"]
+    assert result["summary"]["review_failures"] == []
+
+
+def test_partial_reason_names_both_kinds_of_failure_together(job, monkeypatch):
+    class PartialClient(EvidenceClient):
+        def get(self, path, *args, **kwargs):
+            if "/bad/" in path:
+                raise GitHubUnavailable("GitHub access or rate limit prevented analysis. Retry later.")
+            return super().get(path, *args, **kwargs)
+    monkeypatch.setattr(
+        "services.github.analyzer.collect_github",
+        lambda _: collect_github("test-user", PartialClient([repository("bad"), repository("good")])),
+    )
+    def fail(*_):
+        raise RuntimeError("private provider detail")
+    monkeypatch.setattr("services.github.analyzer.generate_json", fail)
+    result = analyze_github("test-user", job)
+    assert result["status"] == "partial"
+    assert "could not be collected for bad" in result["error_message"]
+    assert "AI review could not be completed for test-user/good" in result["error_message"]
+    assert "private provider detail" not in result["error_message"]
+
+
+def test_complete_analysis_records_no_failure_reason(job, monkeypatch):
+    job.scraper_config["scraperMetrics"] = {key: {"enabled": key == "languageMatch", "weight": 50} for key in METRICS}
+    monkeypatch.setattr(
+        "services.github.analyzer.collect_github",
+        lambda _: collect_github("test-user", EvidenceClient()),
+    )
+    result = analyze_github("test-user", job)
+    assert result["status"] == "complete"
+    assert result["error_message"] is None
+    assert result["summary"]["review_failures"] == []
+
+
+def test_persisted_partial_reason_survives_to_the_api(apply, app, client, monkeypatch):
+    """The stored reason must name the failure, not just say that something failed."""
+    candidate_id = apply().json["candidateId"]
+    monkeypatch.setattr(
+        "services.github.analyzer.collect_github",
+        lambda _: collect_github("test-user", EvidenceClient()),
+    )
+    monkeypatch.setattr("tasks.resume_tasks._extract_pdf_text", lambda _: "Readable text")
+    def fail(*_):
+        raise RuntimeError("private provider detail")
+    monkeypatch.setattr("services.github.analyzer.generate_json", fail)
+    with app.app_context():
+        process_resume_task.run(candidate_id)
+        github = db.session.get(Candidate, candidate_id).github_analysis
+        assert github.status == "partial"
+        assert "test-user/project" in github.error_message
+        assert github.summary["review_failures"][0]["repo_name"] == "test-user/project"
+    payload = client.get(f"/api/candidates/{candidate_id}/analysis").json["github"]
+    assert payload["status"] == "partial"
+    assert "test-user/project" in payload["error_message"]
+    assert payload["summary"]["review_failures"][0]["repo_name"] == "test-user/project"
+    assert "private provider detail" not in str(payload)
 
 
 def test_resume_failure_does_not_block_github_persistence_or_retry(apply, app, client, monkeypatch):

@@ -119,6 +119,8 @@ export type GitHubAnalysis = {
     score_scope?: string;
     unsupported_metrics?: string[];
     errors?: { repo_name: string; message: string }[];
+    /** Repositories whose qualitative AI review failed while evidence was still saved. */
+    review_failures?: { repo_name: string; message: string }[];
   } | null;
 };
 export type CandidateAnalysis = {

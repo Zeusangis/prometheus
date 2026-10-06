@@ -16,7 +16,9 @@ from utils.api_errors import api_error
 
 application_bp = Blueprint("application", __name__)
 MAX_RESUME_BYTES = 5 * 1024 * 1024
-MAX_QUEUE_RESULTS = 200
+# Pagination replaces a blunt row cap: a request can only ever return page_size rows.
+DEFAULT_QUEUE_PAGE_SIZE = 10
+MAX_QUEUE_PAGE_SIZE = 100
 QUEUE_FILTERS = {
     "attention": tuple(RETRYABLE_ANALYSIS),
     "running": ("queued", "running"),
@@ -47,6 +49,44 @@ def _normalize_github_username(value):
 def _parse_job_id(raw_job_id):
     raw = str(raw_job_id or "").strip().removeprefix("job_")
     return int(raw) if raw.isdigit() else None
+
+
+def _parse_positive_int(raw, default, maximum=None):
+    """Return a positive integer, the default when absent, or None when invalid."""
+    text = str(raw or "").strip()
+    if not text:
+        return default
+    if not text.isdigit():
+        return None
+    value = int(text)
+    if value < 1 or (maximum is not None and value > maximum):
+        return None
+    return value
+
+
+def _queue_summary():
+    """Organization-wide counts, independent of the current page and filters.
+
+    The dashboard's metric cards and pipeline distribution must not change when a
+    recruiter narrows or pages the queue, so they are computed from the whole
+    organization rather than from the rows in one response.
+    """
+    def grouped_counts(column):
+        rows = db.session.execute(
+            db.select(column, db.func.count())
+            .select_from(Candidate)
+            .join(Job, Candidate.job_id == Job.id)
+            .where(Job.organization_id == g.organization.id)
+            .group_by(column)
+        ).all()
+        return {key: total for key, total in rows}
+
+    stage_counts = grouped_counts(Candidate.status)
+    return {
+        "total_applicants": sum(stage_counts.values()),
+        "stage_counts": stage_counts,
+        "analysis_counts": grouped_counts(Candidate.analysis_status),
+    }
 
 
 @application_bp.route("/api/public/jobs/<int:job_id>/apply", methods=["POST"])
@@ -164,25 +204,31 @@ def move_to_next_step(candidate_id, job_id=None):
 @application_bp.get("/api/candidates")
 def list_candidates():
     """Applicant screening queue, always scoped to the recruiter's organization."""
-    query = (
-        db.select(Candidate, Job.title)
-        .join(Job, Candidate.job_id == Job.id)
-        .where(Job.organization_id == g.organization.id)
+    conditions = [Job.organization_id == g.organization.id]
+    page = _parse_positive_int(request.args.get("page"), 1)
+    if page is None:
+        return api_error("page_invalid", "Page must be a positive integer.", 400)
+    page_size = _parse_positive_int(
+        request.args.get("page_size"), DEFAULT_QUEUE_PAGE_SIZE, MAX_QUEUE_PAGE_SIZE
     )
+    if page_size is None:
+        return api_error(
+            "page_size_invalid", f"Page size must be between 1 and {MAX_QUEUE_PAGE_SIZE}.", 400
+        )
     stage = request.args.get("stage")
     if stage and stage not in STAGES:
         return api_error("stage_invalid", "Unknown recruiting stage.", 400)
     if stage:
-        query = query.where(Candidate.status == stage)
+        conditions.append(Candidate.status == stage)
     analysis_status = request.args.get("analysis_status")
     if analysis_status and analysis_status not in ANALYSIS_STATUSES:
         return api_error("analysis_status_invalid", "Unknown analysis status.", 400)
     if analysis_status:
-        query = query.where(Candidate.analysis_status == analysis_status)
+        conditions.append(Candidate.analysis_status == analysis_status)
     # Named groupings keep the client from inventing its own status vocabulary.
     for name, statuses in QUEUE_FILTERS.items():
         if request.args.get(name):
-            query = query.where(Candidate.analysis_status.in_(statuses))
+            conditions.append(Candidate.analysis_status.in_(statuses))
     job_id = request.args.get("job_id")
     if job_id:
         parsed_job_id = _parse_job_id(job_id)
@@ -190,22 +236,38 @@ def list_candidates():
             return api_error("job_id_invalid", "Invalid job id.", 400)
         if not owned_job(parsed_job_id):
             return api_error("job_not_found", "Job not found.", 404)
-        query = query.where(Candidate.job_id == parsed_job_id)
+        conditions.append(Candidate.job_id == parsed_job_id)
     search = (request.args.get("q") or "").strip()
     if search:
         pattern = f"%{search.lower()}%"
-        query = query.where(db.or_(
+        conditions.append(db.or_(
             db.func.lower(Candidate.full_name).like(pattern),
             db.func.lower(Candidate.email).like(pattern),
         ))
+    # count(*) over the same join and filters, so the total matches what is listed.
+    total = db.session.scalar(
+        db.select(db.func.count())
+        .select_from(Candidate)
+        .join(Job, Candidate.job_id == Job.id)
+        .where(*conditions)
+    )
     rows = db.session.execute(
-        query.order_by(Candidate.uploaded_at.desc(), Candidate.id.desc()).limit(MAX_QUEUE_RESULTS)
+        db.select(Candidate, Job.title)
+        .join(Job, Candidate.job_id == Job.id)
+        .where(*conditions)
+        .order_by(Candidate.uploaded_at.desc(), Candidate.id.desc())
+        .limit(page_size)
+        .offset((page - 1) * page_size)
     ).all()
     return jsonify({
         "success": True,
         "candidates": [
             {**candidate.to_dict(), "job_title": title} for candidate, title in rows
         ],
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "summary": _queue_summary(),
     })
 
 

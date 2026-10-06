@@ -68,6 +68,7 @@ export default function GitHubSection({ data, requested }: { data: GitHubAnalysi
           <p>{data.summary.commit_scope}</p><p>{data.summary.score_scope}</p>
           {data.summary.unsupported_metrics?.map((item, index) => <p key={index}>{item}</p>)}
           {data.summary.errors?.map((item, index) => <p key={index} className="break-words">{item.repo_name}: {item.message}</p>)}
+          {data.summary.review_failures?.map((item, index) => <p key={`review-${index}`} className="break-words">{item.repo_name}: {item.message}</p>)}
         </div>}
         <p className="mt-4 text-xs text-muted-foreground">Updated: {formatDate(data.updated_at)}. Test evidence is not execution coverage; security review is not a guarantee.</p>
       </>}

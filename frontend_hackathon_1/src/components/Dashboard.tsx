@@ -1,9 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getCompanyJobs, moveCandidateToNextStep } from "../api/jobs";
 import { getAnalysisReadiness } from "../api/health";
-import { getScreeningQueue, type ScreeningCandidate } from "../api/screening";
+import {
+  DEFAULT_PAGE_SIZE,
+  PAGE_SIZE_OPTIONS,
+  getScreeningQueue,
+  type ScreeningCandidate,
+} from "../api/screening";
 
 const PIPELINE_STAGES = [
   "screening",
@@ -33,6 +38,38 @@ const ANALYSIS_BADGE: Record<string, string> = {
 };
 
 const RETRYABLE = new Set(["failed", "enqueue_failed", "partial"]);
+const IN_FLIGHT = ["queued", "running"];
+
+/** The named groupings the queue API understands, so the client invents no vocabulary. */
+const VIEW_OPTIONS = [
+  { value: "", label: "All applicants" },
+  { value: "attention", label: "Needs attention" },
+  { value: "running", label: "Queued or running" },
+] as const;
+
+type QueueView = "" | "attention" | "running";
+
+type QueueFilters = {
+  stage: string;
+  analysisStatus: string;
+  view: QueueView;
+  jobId: string;
+  q: string;
+  page: number;
+  pageSize: number;
+};
+
+const EMPTY_FILTERS: QueueFilters = {
+  stage: "",
+  analysisStatus: "",
+  view: "",
+  jobId: "",
+  q: "",
+  page: 1,
+  pageSize: DEFAULT_PAGE_SIZE,
+};
+
+const SEARCH_DEBOUNCE_MS = 300;
 
 function toStatusLabel(value: string) {
   return value
@@ -55,6 +92,16 @@ function toPublicGitHubUrl(username: string | null) {
   return username ? `https://github.com/${encodeURIComponent(username)}` : null;
 }
 
+/**
+ * Quote a CSV cell, and stop a stored value from being executed as a spreadsheet
+ * formula when the export is opened in Excel or Sheets.
+ */
+function csvCell(value: string | number | null) {
+  const text = value === null || value === undefined ? "" : String(value);
+  const guarded = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return `"${guarded.replace(/"/g, '""')}"`;
+}
+
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <article className="rounded-2xl border border-border bg-card p-5">
@@ -69,23 +116,78 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
   );
 }
 
+function Select({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <label className="flex flex-col gap-1 text-xs font-semibold text-muted-foreground">
+      {label}
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="rounded-xl border border-border bg-background px-3 py-2 text-sm font-normal text-foreground"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 export function Dashboard() {
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [filters, setFilters] = useState<QueueFilters>(EMPTY_FILTERS);
+  const [searchInput, setSearchInput] = useState("");
 
   const jobsQuery = useQuery({
     queryKey: ["company-jobs"],
     queryFn: getCompanyJobs,
   });
   const queueQuery = useQuery({
-    queryKey: ["screening-queue"],
-    queryFn: () => getScreeningQueue(),
+    queryKey: ["screening-queue", filters],
+    queryFn: () =>
+      getScreeningQueue({
+        stage: filters.stage || undefined,
+        analysisStatus: filters.analysisStatus || undefined,
+        attention: filters.view === "attention",
+        running: filters.view === "running",
+        jobId: filters.jobId,
+        q: filters.q,
+        page: filters.page,
+        pageSize: filters.pageSize,
+      }),
+    // Keep the previous page visible while the next one loads.
+    placeholderData: (previous) => previous,
   });
   const readinessQuery = useQuery({
     queryKey: ["analysis-readiness"],
     queryFn: getAnalysisReadiness,
     staleTime: 60_000,
   });
+
+  // Debounce typing so a search does not fire a request per keystroke.
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setFilters((current) =>
+        current.q === searchInput
+          ? current
+          : { ...current, q: searchInput, page: 1 },
+      );
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [searchInput]);
 
   const moveStage = useMutation({
     mutationFn: (candidate: ScreeningCandidate) => {
@@ -114,25 +216,111 @@ export function Dashboard() {
   });
 
   const jobs = jobsQuery.data ?? [];
-  const queue = queueQuery.data ?? [];
+  const queue = queueQuery.data?.candidates ?? [];
+  const summary = queueQuery.data?.summary;
   const queueLoading = queueQuery.isLoading;
+  const page = queueQuery.data?.page ?? filters.page;
+  const pageSize = queueQuery.data?.pageSize ?? filters.pageSize;
+  const total = queueQuery.data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const firstRow = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const lastRow = Math.min(page * pageSize, total);
+
+  // Every metric is organization-wide, so filtering or paging never changes it.
+  const stageCounts = summary?.stage_counts ?? {};
+  const analysisCounts = summary?.analysis_counts ?? {};
+  const totalApplicants = summary?.total_applicants ?? 0;
   const openJobs = jobs.filter((job) => job.status === "open").length;
-  const awaitingScreening = queue.filter(
-    (candidate) => candidate.status === "screening",
-  ).length;
-  const needsAttention = queue.filter((candidate) =>
-    RETRYABLE.has(candidate.analysis_status),
-  ).length;
-  const inFlight = queue.filter((candidate) =>
-    ["queued", "running"].includes(candidate.analysis_status),
-  ).length;
+  const awaitingScreening = stageCounts.screening ?? 0;
+  const needsAttention = [...RETRYABLE].reduce(
+    (sum, status) => sum + (analysisCounts[status] ?? 0),
+    0,
+  );
+  const inFlight = IN_FLIGHT.reduce(
+    (sum, status) => sum + (analysisCounts[status] ?? 0),
+    0,
+  );
 
   const pipeline = PIPELINE_STAGES.map((stage) => ({
     stage,
     label: toStatusLabel(stage),
-    count: queue.filter((candidate) => candidate.status === stage).length,
+    count: stageCounts[stage] ?? 0,
   }));
-  const pipelineTotal = pipeline.reduce((total, item) => total + item.count, 0);
+  const pipelineTotal = pipeline.reduce((sum, item) => sum + item.count, 0);
+
+  const hasFilters =
+    Boolean(filters.stage) ||
+    Boolean(filters.analysisStatus) ||
+    Boolean(filters.view) ||
+    Boolean(filters.jobId) ||
+    Boolean(filters.q);
+
+  const updateFilters = (patch: Partial<QueueFilters>) =>
+    setFilters((current) => ({ ...current, ...patch, page: patch.page ?? 1 }));
+
+  const clearFilters = () => {
+    setSearchInput("");
+    setFilters((current) => ({
+      ...EMPTY_FILTERS,
+      pageSize: current.pageSize,
+    }));
+  };
+
+  const exportPageCsv = () => {
+    const header = [
+      "Applicant",
+      "Email",
+      "GitHub",
+      "Role",
+      "Stage",
+      "Analysis",
+      "ATS score",
+      "Submitted",
+    ];
+    const rows = queue.map((candidate) => [
+      candidate.full_name || `Candidate #${candidate.id}`,
+      candidate.email,
+      candidate.github_username ?? "not provided",
+      candidate.job_title,
+      candidate.status,
+      candidate.analysis_status,
+      candidate.ats_score === null ? "Not measured" : String(candidate.ats_score),
+      candidate.uploaded_at,
+    ]);
+    const csv = [header, ...rows]
+      .map((row) => row.map(csvCell).join(","))
+      .join("\r\n");
+    const blob = new Blob([`\uFEFF${csv}`], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `screening-queue-page-${page}.csv`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const jobOptions = [
+    { value: "", label: "All roles" },
+    ...jobs.map((job) => ({ value: String(job.id), label: job.title })),
+  ];
+  const stageOptions = [
+    { value: "", label: "All stages" },
+    ...PIPELINE_STAGES.map((stage) => ({
+      value: stage,
+      label: toStatusLabel(stage),
+    })),
+  ];
+  const analysisOptions = [
+    { value: "", label: "All analysis states" },
+    ...Object.keys(ANALYSIS_BADGE).map((status) => ({
+      value: status,
+      label: toStatusLabel(status),
+    })),
+  ];
 
   return (
     <div className="flex-1 overflow-auto p-6">
@@ -195,7 +383,7 @@ export function Dashboard() {
         />
         <Metric
           label="Applicants"
-          value={queueLoading ? "—" : String(queue.length)}
+          value={queueLoading ? "—" : String(totalApplicants)}
           detail="Applicants linked to your organization's jobs"
         />
         <Metric
@@ -220,7 +408,8 @@ export function Dashboard() {
             Pipeline distribution
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Recruiting stages are tracked separately from analysis status.
+            Recruiting stages are tracked separately from analysis status. Counts
+            cover the whole organization, not the current filter.
           </p>
           {queueLoading ? (
             <p className="mt-4 text-sm text-muted-foreground">
@@ -333,13 +522,70 @@ export function Dashboard() {
           </Link>
         </div>
 
+        <div className="mt-4 flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-background p-4">
+          <label className="flex min-w-56 flex-1 flex-col gap-1 text-xs font-semibold text-muted-foreground">
+            Search
+            <input
+              type="search"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Name or email"
+              aria-label="Search applicants by name or email"
+              className="rounded-xl border border-border bg-card px-3 py-2 text-sm font-normal text-foreground"
+            />
+          </label>
+          <Select
+            label="Stage"
+            value={filters.stage}
+            onChange={(value) => updateFilters({ stage: value })}
+            options={stageOptions}
+          />
+          <Select
+            label="Analysis"
+            value={filters.analysisStatus}
+            onChange={(value) => updateFilters({ analysisStatus: value })}
+            options={analysisOptions}
+          />
+          <Select
+            label="View"
+            value={filters.view}
+            onChange={(value) => updateFilters({ view: value as QueueView })}
+            options={[...VIEW_OPTIONS]}
+          />
+          <Select
+            label="Role"
+            value={filters.jobId}
+            onChange={(value) => updateFilters({ jobId: value })}
+            options={jobOptions}
+          />
+          <Select
+            label="Rows per page"
+            value={String(filters.pageSize)}
+            onChange={(value) => updateFilters({ pageSize: Number(value) })}
+            options={PAGE_SIZE_OPTIONS.map((size) => ({
+              value: String(size),
+              label: String(size),
+            }))}
+          />
+          {hasFilters ? (
+            <button
+              onClick={clearFilters}
+              className="rounded-xl border border-border px-3 py-2 text-sm font-semibold text-primary transition-colors hover:border-primary"
+            >
+              Clear filters
+            </button>
+          ) : null}
+        </div>
+
         {queueLoading ? (
           <p className="mt-4 text-sm text-muted-foreground">
             Loading screening queue…
           </p>
         ) : queue.length === 0 ? (
           <p className="mt-4 text-sm text-muted-foreground">
-            No applicants to screen yet.
+            {hasFilters
+              ? "No applicants match these filters."
+              : "No applicants to screen yet."}
           </p>
         ) : (
           <div className="mt-4 overflow-x-auto">
@@ -356,7 +602,7 @@ export function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {queue.slice(0, 10).map((candidate) => {
+                {queue.map((candidate) => {
                   const nextStage = candidate.allowed_actions.find(
                     (action) => action !== "rejected",
                   );
@@ -473,11 +719,39 @@ export function Dashboard() {
                 })}
               </tbody>
             </table>
-            {queue.length > 10 ? (
-              <p className="mt-3 text-xs text-muted-foreground">
-                Showing the 10 most recent of {queue.length} applicants.
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                Showing {firstRow}–{lastRow} of {total} applicant
+                {total === 1 ? "" : "s"}
+                {hasFilters ? " matching these filters" : ""}.{" "}
+                <button
+                  onClick={exportPageCsv}
+                  className="font-semibold text-primary underline"
+                >
+                  Export this page as CSV
+                </button>
               </p>
-            ) : null}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => updateFilters({ page: page - 1 })}
+                  disabled={page <= 1}
+                  className="rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <span className="text-xs text-muted-foreground">
+                  Page {page} of {pageCount}
+                </span>
+                <button
+                  onClick={() => updateFilters({ page: page + 1 })}
+                  disabled={page >= pageCount}
+                  className="rounded-xl border border-border px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:border-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </section>

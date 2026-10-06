@@ -138,7 +138,9 @@ def vocabulary_section() -> list:
 
 def limits_section() -> list:
     from config import DevelopmentConfig
-    from routes.application_routes import MAX_QUEUE_RESULTS, MAX_RESUME_BYTES
+    from routes.application_routes import (
+        DEFAULT_QUEUE_PAGE_SIZE, MAX_QUEUE_PAGE_SIZE, MAX_RESUME_BYTES,
+    )
     from services.ai.gemini import (
         DEFAULT_MODEL, RETRY_ATTEMPTS, RETRY_BASE_SECONDS, RETRY_MAX_SERVER_DELAY, RETRY_MAX_SECONDS,
     )
@@ -150,7 +152,7 @@ def limits_section() -> list:
     rows = [
         ("Resume file size", f"{MAX_RESUME_BYTES // mib} MiB", "routes/application_routes.py"),
         ("Request size", f"{MAX_RESUME_BYTES // mib} MiB + {(DevelopmentConfig.MAX_CONTENT_LENGTH - MAX_RESUME_BYTES) // 1024} KiB multipart overhead", "config/__init__.py"),
-        ("Screening queue rows", str(MAX_QUEUE_RESULTS), "routes/application_routes.py"),
+        ("Screening queue page size", f"default {DEFAULT_QUEUE_PAGE_SIZE}, maximum {MAX_QUEUE_PAGE_SIZE}", "routes/application_routes.py"),
         ("Resume text sent to provider", f"{MAX_RESUME_CHARS:,} characters", "services/resume/analyzer.py"),
         ("Provider model (default)", DEFAULT_MODEL, "services/ai/gemini.py"),
         ("Provider retry attempts", str(RETRY_ATTEMPTS), "services/ai/gemini.py"),

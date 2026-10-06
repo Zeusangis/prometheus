@@ -20,6 +20,11 @@ class Candidate(db.Model):
         "MeetingSummary", back_populates="candidate", lazy=True
     )
     resume_analysis = db.relationship("ResumeAnalysis", back_populates="candidate", uselist=False, cascade="all, delete-orphan")
+    # Append-only audit trail; intentionally no delete cascade so recorded events
+    # are never silently stripped away with the candidate.
+    stage_events = db.relationship(
+        "StageEvent", back_populates="candidate", order_by="StageEvent.id"
+    )
     github_analysis = db.relationship("GitHubAnalysis", back_populates="candidate", uselist=False, cascade="all, delete-orphan")
     raw_text = db.Column(db.Text, nullable=True)
     ats_score = db.Column(db.Float, nullable=True)

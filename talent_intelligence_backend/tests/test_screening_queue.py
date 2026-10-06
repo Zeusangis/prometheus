@@ -126,6 +126,83 @@ def test_queue_job_filter_requires_owned_job(client, queue, job_id):
     assert client.get("/api/candidates?job_id=not-a-job").status_code == 400
 
 
+def test_queue_reports_page_total_and_organization_summary(client, queue):
+    payload = client.get("/api/candidates").json
+    assert payload["page"] == 1
+    assert payload["page_size"] == 10
+    assert payload["total"] == 3
+    assert payload["summary"]["total_applicants"] == 3
+    assert payload["summary"]["stage_counts"] == {
+        "screening": 1, "interview_scheduled": 1, "rejected": 1,
+    }
+    assert sum(payload["summary"]["analysis_counts"].values()) == 3
+
+
+def test_queue_pages_through_every_applicant_exactly_once(client, queue, pdf_bytes, job_id):
+    for index in range(2):
+        response = submit(
+            client, job_id, pdf_bytes, f"Page Candidate {index}", f"page{index}@example.invalid"
+        )
+        assert response.status_code == 200
+    seen = []
+    for page in (1, 2, 3):
+        payload = client.get(f"/api/candidates?page={page}&page_size=2").json
+        assert payload["total"] == 5
+        assert payload["page"] == page
+        assert len(payload["candidates"]) <= 2
+        seen.extend(names(payload["candidates"]))
+    # Every applicant is reached once, with no duplicate and no gap.
+    assert len(seen) == 5
+    assert sorted(seen) == sorted({
+        "Ada Queue", "Grace Queue", "Linus Queue", "Page Candidate 0", "Page Candidate 1",
+    })
+
+
+def test_queue_page_past_the_end_is_empty_but_keeps_the_total(client, queue):
+    payload = client.get("/api/candidates?page=99&page_size=10").json
+    assert payload["candidates"] == []
+    assert payload["total"] == 3
+
+
+@pytest.mark.parametrize("query,code", [
+    ("page=0", "page_invalid"),
+    ("page=-1", "page_invalid"),
+    ("page=abc", "page_invalid"),
+    ("page_size=0", "page_size_invalid"),
+    ("page_size=-5", "page_size_invalid"),
+    ("page_size=101", "page_size_invalid"),
+    ("page_size=ten", "page_size_invalid"),
+])
+def test_queue_rejects_invalid_pagination(client, queue, query, code):
+    response = client.get(f"/api/candidates?{query}")
+    assert response.status_code == 400
+    assert response.json["error"]["code"] == code
+
+
+def test_queue_accepts_the_largest_allowed_page(client, queue):
+    payload = client.get("/api/candidates?page_size=100").json
+    assert payload["page_size"] == 100
+    assert len(payload["candidates"]) == 3
+
+
+def test_queue_summary_ignores_filters_so_the_metrics_stay_truthful(client, queue):
+    """Filtering or paging must not change the organization-wide metric cards."""
+    payload = client.get("/api/candidates?stage=rejected&page_size=1").json
+    assert payload["total"] == 1
+    assert names(payload["candidates"]) == ["Linus Queue"]
+    assert payload["summary"]["total_applicants"] == 3
+    assert payload["summary"]["stage_counts"]["screening"] == 1
+
+
+def test_queue_summary_excludes_other_organizations(client, queue, app):
+    seed_second_organization(app)
+    summary = client.get("/api/candidates").json["summary"]
+    assert summary["total_applicants"] == 3
+    assert summary["stage_counts"] == {
+        "screening": 1, "interview_scheduled": 1, "rejected": 1,
+    }
+
+
 def test_job_list_reports_real_stage_counts(client, queue):
     jobs = client.get("/api/jobs").json["jobs"]
     assert len(jobs) == 1

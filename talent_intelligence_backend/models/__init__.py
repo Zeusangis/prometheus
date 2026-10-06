@@ -9,3 +9,4 @@ from models.auth import User, Organization, OrganizationMembership  # noqa: E402
 from models.candidate import Candidate  # noqa: E402,F401
 from models.job import Job  # noqa: E402,F401
 from models.meeting_summary import MeetingSummary  # noqa: E402,F401
+from models.stage_event import StageEvent  # noqa: E402,F401

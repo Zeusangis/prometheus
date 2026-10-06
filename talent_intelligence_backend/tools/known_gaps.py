@@ -76,14 +76,6 @@ def _interviews_are_mocked(app):
     _assert_no_table(r"interview", r"session")
 
 
-def _dashboard_queue_has_no_controls(app):
-    text = _read(FRONTEND_SRC / "components" / "Dashboard.tsx")
-    assert "queue.slice(0, 10)" in text, "the queue no longer renders only the 10 most recent applicants"
-    assert not re.search(r"\bcsv\b", text, re.I), "the dashboard now offers a CSV export"
-    for control in ("<input", "<select", "useSearchParams", "setSearchParams", "pageSize"):
-        assert control not in text, f"the dashboard now renders a filter, search or pagination control ({control})"
-
-
 def _no_audit_trail(app):
     _assert_no_table(r"audit", r"stage_event", r"stage_history", r"stage_log")
     _assert_source_free_of(r"\bAuditLog\b|\bStageEvent\b", "an audit trail")
@@ -140,10 +132,6 @@ CLAIM_CHECKS = {
     "interviews-mocked": (
         "interview summaries are still demo data and live interviews are disabled",
         _interviews_are_mocked,
-    ),
-    "dashboard-queue-controls-missing": (
-        "the dashboard queue has no filter, search, pagination or CSV export and shows the 10 most recent",
-        _dashboard_queue_has_no_controls,
     ),
     "no-audit-trail": (
         "there is no immutable record of stage changes",

@@ -94,10 +94,16 @@ Behaviour worth knowing beyond the table:
   already queued/running/complete, and 503 when the broker refused the task.
 - Job creation requires title, job type and description; `/api/jobs/my-company` is an alias for the
   job list, and the legacy `/api/jobs/<int:id>/apply` path is kept as a public alias.
+- A `partial` or `failed` GitHub component always records a reason naming the repositories that
+  failed: those whose evidence could not be collected (`summary.errors`) and those whose qualitative
+  AI review failed (`summary.review_failures`). Provider payloads are never copied into either.
 
 Screening queue query parameters: `stage`, `analysis_status`, `attention=1`
 (failed / enqueue_failed / partial), `running=1` (queued / running), `job_id`, `q` (name or email,
-case-insensitive). Results are newest-first and capped at 200 rows.
+case-insensitive), `page` (1-based) and `page_size` (default 10, maximum 100). Results are
+newest-first and paged. The response is `{candidates, page, page_size, total, summary}`, where
+`total` counts the rows matching the current filters while `summary` carries organization-wide stage
+and analysis counts — so filtering or paging never changes the dashboard's metric cards.
 
 ### 3.4 Data model
 
@@ -168,7 +174,8 @@ Resume upload: PDF only, 5 MiB file limit with 64 KiB multipart overhead, extens
 `%PDF-` signature checks, stored once as `uuid4-secure_filename` (MIME checks are not malware
 scanning). GitHub: 40 requests, 2 MiB responses, 90 s budget, 5 s per request, 2 repo pages of 100,
 3 analyzed repositories, 30 commits, 3,000 tree entries, 3 files of 50 KB (4,000 characters kept),
-90-day lookback. Screening queue: 200 rows. Raw repository code is never persisted — only scores,
+90-day lookback. Screening queue: paged, default 10 rows per page, maximum 100. Raw repository code
+is never persisted — only scores,
 summaries and short provenance excerpts.
 
 ## 4. Frontend
@@ -178,7 +185,7 @@ summaries and short provenance excerpts.
 | Path | Screen | Data |
 | --- | --- | --- |
 | `/login` | `LoginPage` | real session login |
-| `/`, `/dashboard` | `pages/dashboard/Dashboard` → `components/Dashboard` | real KPIs, pipeline, roles, screening queue |
+| `/`, `/dashboard` | `pages/dashboard/Dashboard` → `components/Dashboard` | real KPIs, pipeline, roles, screening queue with filters, search, pagination and CSV export |
 | `/dashboard/jobs` | `JobsPage` → `JobsList` | real jobs with applicant/stage/interviewing counts |
 | `/dashboard/$jobId` | `JobDetail` | real job, per-stage pipeline cards, applicant list with ATS evidence, stage moves |
 | `/profile/$candidateId` | `ProfilePage` | real candidate, tabs Overview / Resume / GitHub Evidence / Scores & Analysis |
@@ -197,7 +204,7 @@ summaries and short provenance excerpts.
   `credentials: "same-origin"`. All authenticated clients go through it.
 - [`src/api/jobs.ts`](../frontend_hackathon_1/src/api/jobs.ts) — jobs, applicants, stage moves.
 - [`src/api/screening.ts`](../frontend_hackathon_1/src/api/screening.ts) — screening queue with
-  typed filters.
+  typed filters, pagination and the organization summary.
 - [`src/api/apply.ts`](../frontend_hackathon_1/src/api/apply.ts) — public job/apply plus the
   candidate profile and typed analysis payloads (`getCandidateAnalysis`,
   `retryCandidateAnalysis`).
@@ -277,9 +284,6 @@ updated together instead of letting the document quietly become false.
 - **Interviews**: `/profile/$candidateId/interview-summary` still renders demo interview data, and
   live interviews are disabled (provider settings are placeholders). No secure session model has
   been designed; do not send long-lived provider keys to a browser. <!-- claim: interviews-mocked -->
-- **Dashboard controls**: the queue API supports stage/analysis filters, search and job scoping, but
-  the UI has no filter, search, pagination or CSV export yet, and it renders the 10 most recent of
-  the queue. <!-- claim: dashboard-queue-controls-missing -->
 - **Audit trail**: stage changes update a column only; there is no immutable record of who moved a
   candidate, when, or from which stage. <!-- claim: no-audit-trail -->
 - **Concurrency**: no worker leases or dead-worker recovery, no enqueue outbox, no versioned
@@ -307,18 +311,16 @@ updated together instead of letting the document quietly become false.
 None of these is implemented yet: each closes the matching section 7 claim, so doing one means
 updating this list, that section 7 entry and its check in `tools/known_gaps.py` in the same change.
 
-1. Screening filters, search and pagination in the dashboard, using the existing query parameters.
-   <!-- claim: dashboard-queue-controls-missing -->
-2. An immutable audit trail for stage changes and analysis retries, surfaced on the profile.
+1. An immutable audit trail for stage changes and analysis retries, surfaced on the profile.
    <!-- claim: no-audit-trail -->
-3. Replace the mocked interview summary with persisted interview data and design a secure
+2. Replace the mocked interview summary with persisted interview data and design a secure
    interview-session model before enabling live interviews. <!-- claim: interviews-mocked -->
-4. Rate limiting (auth and apply), object storage for resumes, and retention/deletion policy.
+3. Rate limiting (auth and apply), object storage for resumes, and retention/deletion policy.
    <!-- claim: no-rate-limiting -->
    <!-- claim: no-object-storage-or-compose -->
-5. Concurrency hardening: worker leases, dead-worker recovery, an enqueue outbox and versioned
+4. Concurrency hardening: worker leases, dead-worker recovery, an enqueue outbox and versioned
    analysis results. <!-- claim: no-concurrency-hardening -->
-6. Delete or quarantine the prototype residue (`main1/`, `models/github_ats.py`) once its ideas are
+5. Delete or quarantine the prototype residue (`main1/`, `models/github_ats.py`) once its ideas are
    confirmed migrated. <!-- claim: prototype-residue-present -->
 
 ## 9. Working conventions
@@ -407,7 +409,7 @@ Generated from the code by `python -m tools.generate_project_context` (backend w
 | --- | --- | --- |
 | Resume file size | 5 MiB | `routes/application_routes.py` |
 | Request size | 5 MiB + 64 KiB multipart overhead | `config/__init__.py` |
-| Screening queue rows | 200 | `routes/application_routes.py` |
+| Screening queue page size | default 10, maximum 100 | `routes/application_routes.py` |
 | Resume text sent to provider | 60,000 characters | `services/resume/analyzer.py` |
 | Provider model (default) | gemini-3.8-flash | `services/ai/gemini.py` |
 | Provider retry attempts | 3 | `services/ai/gemini.py` |
@@ -450,7 +452,7 @@ Generated from the code by `python -m tools.generate_project_context` (backend w
 | `tests/test_authorization.py` | 3 |
 | `tests/test_bootstrap.py` | 2 |
 | `tests/test_candidate_stage.py` | 4 |
-| `tests/test_github_analysis.py` | 25 |
+| `tests/test_github_analysis.py` | 30 |
 | `tests/test_jobs_api.py` | 6 |
 | `tests/test_migrations_and_config.py` | 6 |
 | `tests/test_project_context.py` | 4 |
@@ -458,7 +460,7 @@ Generated from the code by `python -m tools.generate_project_context` (backend w
 | `tests/test_public_applications.py` | 10 |
 | `tests/test_resume_analyzer.py` | 6 |
 | `tests/test_resume_pipeline.py` | 8 |
-| `tests/test_screening_queue.py` | 12 |
-| **total** | **108** (parametrized cases expand at run time) |
+| `tests/test_screening_queue.py` | 19 |
+| **total** | **120** (parametrized cases expand at run time) |
 
 <!-- END GENERATED INVENTORY -->

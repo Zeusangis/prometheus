@@ -247,6 +247,90 @@ The queue is capped at 200 rows and returns only applicants linked to a job in t
 
 Add screening filters, search and pagination to the dashboard, then replace the interview-summary mock and continue interview-session security and deployment hardening. Push each verified coherent checkpoint.
 
+## Phase 10 checkpoint — 2026-10-06
+
+### PHASE
+
+Screening queue filters, search, pagination and CSV export in the dashboard.
+
+### COMPLETED
+
+- `GET /api/candidates` is now paged: `page` (1-based) and `page_size` (default 10, maximum 100), and the response adds `page`, `page_size`, `total` and `summary`. `total` counts the rows matching the active filters, while `summary` carries organization-wide stage and analysis counts. The blunt 200-row cap was removed because one request can now only ever return `page_size` rows.
+- Invalid pagination is rejected instead of silently coerced: a non-positive or non-numeric `page` returns 400 `page_invalid`, and a `page_size` outside 1..100 returns 400 `page_size_invalid`.
+- The dashboard gained server-backed controls: stage, analysis-status, named grouping (needs attention / queued or running), per-role and rows-per-page selects, a debounced (300 ms) name/email search, page navigation with "Showing X–Y of N" and "Page p of n", and a CSV export of the rows on screen.
+- Metric cards and the pipeline distribution now read the organization-wide `summary` instead of the rendered rows. This fixed a latent truthfulness bug: the previous implementation counted only the rows the client happened to have loaded, so narrowing or paging the queue would have changed "14 applicants" into the filtered count.
+- CSV export quotes every field, doubles embedded quotes, and prefixes a leading `=`, `+`, `-`, `@`, tab or carriage return with an apostrophe so a stored value cannot execute as a spreadsheet formula.
+- The `dashboard-queue-controls-missing` claim was closed, not weakened: its section 7 entry, its section 8 next step and its `tools/known_gaps.py` check were removed together, and section 8 was renumbered.
+
+### FILES CHANGED
+
+[application_routes.py](../talent_intelligence_backend/routes/application_routes.py) (pagination, total, organization summary), [test_screening_queue.py](../talent_intelligence_backend/tests/test_screening_queue.py) (13 new cases); [screening.ts](../frontend_hackathon_1/src/api/screening.ts), [Dashboard.tsx](../frontend_hackathon_1/src/components/Dashboard.tsx); [generate_project_context.py](../talent_intelligence_backend/tools/generate_project_context.py), [known_gaps.py](../talent_intelligence_backend/tools/known_gaps.py); [project-context.md](project-context.md) and the README.
+
+### DATABASE MIGRATIONS
+
+None. No schema change: `c840ab218f12` remains the head migration and the migration/schema-drift tests still pass.
+
+### VERIFICATION RUN
+
+207 pytest cases pass (13 new screening-queue cases: page and total reporting, paging without gaps or duplicates, a page past the end, seven invalid-pagination parameters, the largest allowed page, filter-independent totals and summary, and organization scoping of the summary) and Ruff reports no findings. `npm run typecheck` and `npm run build` both exit 0. The generated-inventory test passes, confirming Appendix A.4 now reports the page-size limit in place of the removed row cap and that the claim markers still match the registry.
+
+### MANUAL SMOKE TEST
+
+Real Chromium against a Vite dev server on port 5184 proxying an isolated harness on 5099, signed in as a seeded recruiter, with 15 applicants inserted directly into the smoke database so that no provider call or GitHub request was made:
+
+- Page 1 listed the 10 newest applicants newest-first with "Showing 1–10 of 14" and "Page 1 of 2". The metric cards read 1 open role, 14 applicants, 3 awaiting screening and 7 needing attention with "4 analysis jobs still queued or running"; the pipeline showed Screening 3, Interview Scheduled 3, Interview Completed 2, Offer Made 2, Hired 2, Rejected 2 — each matching the database.
+- "Next" listed the 4 oldest applicants with "Showing 11–14 of 14", "Page 2 of 2" and Next disabled, while every metric card stayed unchanged.
+- Filtering to Rejected reduced the table to 2 rows, reset to "Page 1 of 1" and "Showing 1–2 of 2 applicants matching these filters", and the metric cards again stayed at 14 / 3 / 7 — the property that naive pagination would have silently broken.
+- Typing `grace` (after the debounce) reduced the table to Grace Hopper with "Showing 1–1 of 1 applicant matching these filters".
+- Rows per page 25 showed all 14 rows on a single page.
+- CSV export produced the expected header and 15 rows. A deliberately hostile applicant name `=HYPERLINK("http://evil.invalid","click")` was exported as `'=HYPERLINK(""http://evil.invalid"",""click"")` — formula neutralised and quotes doubled — and an email containing a comma and a quote stayed inside one correctly quoted field.
+- No console errors and no failed requests.
+
+### KNOWN LIMITATIONS
+
+Pagination and search are server-side but `page` is unbounded, so a very large page number still performs a deep offset scan; only the page size is capped. CSV export writes the rows on screen rather than the whole result set. There is still no frontend test runner, so the filter, pagination, search and CSV behaviour is covered by the browser smoke above rather than by an automated unit test. The interview-summary and interview screens remain mocked, and audit, rate limiting, storage, retention and concurrency work remain outstanding.
+
+### NEXT PHASE
+
+Replace the mocked interview-summary screen with persisted interview data and design the secure interview-session model, then continue deployment hardening: an immutable audit trail for stage changes and retries, rate limiting on auth and public apply, and object storage with a retention policy.
+
+## Phase 11 checkpoint — 2026-10-06
+
+### PHASE
+
+A partial or failed GitHub analysis must record a reason that matches its status.
+
+### COMPLETED
+
+- Every incomplete GitHub outcome previously stored one generic sentence ("Some repository evidence or AI reviews could not be completed."), and the repositories that actually failed were only discoverable by inspecting each row. `summary.errors` carried collection failures but never review failures, so a `partial` status could be recorded with no indication of what was missing.
+- The recorded `error_message` now names the repositories that failed, split by cause: "repository evidence could not be collected for X" and "the AI review could not be completed for Y", joined with `; ` and prefixed by "GitHub analysis is partial:" or "GitHub analysis failed:". A `partial` or `failed` status can no longer be recorded without a reason naming the failure.
+- `summary.review_failures` was added as `[{repo_name, message}]`, so a review failure is discoverable from the summary exactly as a collection failure already was, and the GitHub Evidence tab renders it beside the existing collection errors.
+- Only repository names and our own fixed category wording are used. Provider payloads, response bodies, URLs and credentials are never copied into the reason, extending the existing rule that provider exception text is never stored.
+
+### FILES CHANGED
+
+[analyzer.py](../talent_intelligence_backend/services/github/analyzer.py), [test_github_analysis.py](../talent_intelligence_backend/tests/test_github_analysis.py) (6 new cases); [apply.ts](../frontend_hackathon_1/src/api/apply.ts), [GitHubSection.tsx](../frontend_hackathon_1/src/pages/dashboard/GitHubSection.tsx); [project-context.md](project-context.md) and the README.
+
+### DATABASE MIGRATIONS
+
+None. `summary` is an existing JSON column and an added key needs no migration; `c840ab218f12` remains the head migration.
+
+### VERIFICATION RUN
+
+212 pytest cases pass (6 new: a review-only failure names its repository, a collection-only failure names its repository, both kinds named together, a failed analysis that names its reason, a complete analysis with no reason and no review failures, and a persisted partial reason surviving to the API) and Ruff reports no findings. `npm run typecheck` and `npm run build` both exit 0.
+
+### MANUAL SMOKE TEST
+
+Real Chromium against the isolated harness, signed in as a seeded recruiter, with one applicant whose saved GitHub result is partial. The GitHub Evidence tab showed the status chip "Partial", the recorded reason "GitHub analysis is partial: repository evidence could not be collected for Hello-World; the AI review could not be completed for octocat/Spoon-Knife, octocat/octocat.github.io. Retry later.", and the matching per-repository lines drawn from `summary.errors` and `summary.review_failures`. No console errors.
+
+### KNOWN LIMITATIONS
+
+The reason is a single assembled sentence, so it is not machine-readable beyond the two summary lists; a consumer parsing the prose rather than the lists is still guessing. At most three repositories are analysed, so the named list is naturally short and carries no truncation notice.
+
+### NEXT PHASE
+
+Continue deployment hardening: an immutable audit trail for stage changes and retries, rate limiting on auth and public apply, and object storage with a retention policy; and replace the mocked interview-summary screen.
+
 ## Subsequent required work
 
-Authentication + organization ownership/CSRF (Phase 4), persisted analyses and providers (Phases 5-7), the truthful applicant evidence profile (Phase 8) and the organization-scoped screening queue and dashboard (Phase 9) are implemented. Deployment remains blocked on remaining privacy/rate-limit/provider/storage work. The interview-summary and interview screens, dashboard filtering/pagination, secure interview sessions, privacy/rate limits/storage/audit, Compose, and the final end-to-end scenario remain required. Do not treat a green initial CI checkpoint as product completion.
+Authentication + organization ownership/CSRF (Phase 4), persisted analyses and providers (Phases 5-7), the truthful applicant evidence profile (Phase 8), the organization-scoped screening queue and dashboard (Phase 9) and its filters, search, pagination and CSV export (Phase 10) are implemented. Deployment remains blocked on remaining privacy/rate-limit/provider/storage work. The interview-summary and interview screens, secure interview sessions, privacy/rate limits/storage/audit, Compose, and the final end-to-end scenario remain required. Do not treat a green initial CI checkpoint as product completion.

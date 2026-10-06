@@ -143,18 +143,59 @@ def analyze_repository(repo, job, config):
     }
 
 
+MAX_REPOSITORIES_NAMED = 5
+
+
+def named_repositories(items):
+    """Repository names for a reviewer-facing sentence, bounded in length."""
+    return ", ".join(str(item["repo_name"])[:120] for item in items[:MAX_REPOSITORIES_NAMED])
+
+
+def incomplete_reason(collection_errors, review_failures):
+    """Name what actually failed, so a partial result explains itself.
+
+    Only repository names and our own fixed category wording are used: provider
+    payloads, response bodies, URLs and credentials are never copied into the record.
+    """
+    parts = []
+    if collection_errors:
+        parts.append(
+            "repository evidence could not be collected for " + named_repositories(collection_errors)
+        )
+    if review_failures:
+        parts.append(
+            "the AI review could not be completed for " + named_repositories(review_failures)
+        )
+    return "; ".join(parts)
+
+
 def analyze_github(username, job):
     if not job:
         raise GitHubUnavailable("GitHub analysis requires a linked job.")
     config = metric_config(job)
     evidence = collect_github(username)
     repositories = [analyze_repository(repo, job, config) for repo in evidence["repositories"]]
-    incomplete = bool(evidence["summary"]["errors"]) or any(repo["evidence_metadata"]["review_error"] for repo in repositories)
+    collection_errors = list(evidence["summary"]["errors"])
+    review_failures = [
+        {"repo_name": repo["repo_name"], "message": repo["evidence_metadata"]["review_error"]}
+        for repo in repositories if repo["evidence_metadata"]["review_error"]
+    ]
+    reason = incomplete_reason(collection_errors, review_failures)
+    if not reason:
+        status, error_message = "complete", None
+    elif repositories:
+        # A recorded status must always come with a reason that names the failure.
+        status = "partial"
+        error_message = f"GitHub analysis is partial: {reason}. Retry later."
+    else:
+        status = "failed"
+        error_message = f"GitHub analysis failed: {reason}. Retry later."
     scores = [repo["score"] for repo in repositories if repo["score"] is not None]
     return {**{key: evidence[key] for key in ("username", "total_public_repos", "total_stars", "candidate_attributed_commits")},
-            "status": ("partial" if repositories else "failed") if incomplete else "complete",
-            "error_message": "Some repository evidence or AI reviews could not be completed. Retry later." if incomplete else None,
-            "summary": {**evidence["summary"], "sample_mean_score": round(sum(scores) / len(scores), 2) if scores else None,
+            "status": status,
+            "error_message": error_message,
+            "summary": {**evidence["summary"], "review_failures": review_failures,
+                        "sample_mean_score": round(sum(scores) / len(scores), 2) if scores else None,
                         "scored_repositories": len(scores),
                         "score_scope": "Unweighted mean of available sampled repository scores, not a complete candidate ranking or hiring decision.",
                         "unsupported_metrics": ["openSource: PRs, issues and reviews are not collected in this checkpoint."]},
