@@ -9,6 +9,7 @@ from utils.celery_setup import celery_init_app
 from utils.api_errors import register_error_handlers
 from utils.commands import register_commands
 from services.auth import register_auth_guard
+from services.ai.gemini import provider_status
 from routes.auth_routes import auth_bp
 
 from routes.github_routes import github_bp
@@ -37,7 +38,8 @@ def create_app(config_overrides=None):
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "service": "TrueHire"}
+        # Readiness only: booleans and a model name, never a credential.
+        return {"status": "ok", "service": "TrueHire", **provider_status()}
 
     # Register blueprints
     app.register_blueprint(github_bp)

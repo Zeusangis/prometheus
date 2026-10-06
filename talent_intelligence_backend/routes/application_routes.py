@@ -225,6 +225,9 @@ def get_analysis(candidate_id):
     return jsonify({
         "status": candidate.analysis_status,
         "error_message": candidate.analysis_error,
+        # The recruiter owns this application, so the extracted text is visible for review
+        # and for diagnosing why an analysis failed.
+        "resume_text": candidate.raw_text,
         "resume": candidate.resume_analysis.to_dict() if candidate.resume_analysis else None,
         "github": candidate.github_analysis.to_dict() if candidate.github_analysis else None,
     })

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { getCompanyJobs, moveCandidateToNextStep } from "../api/jobs";
+import { getAnalysisReadiness } from "../api/health";
 import { getScreeningQueue, type ScreeningCandidate } from "../api/screening";
 
 const PIPELINE_STAGES = [
@@ -80,6 +81,11 @@ export function Dashboard() {
     queryKey: ["screening-queue"],
     queryFn: () => getScreeningQueue(),
   });
+  const readinessQuery = useQuery({
+    queryKey: ["analysis-readiness"],
+    queryFn: getAnalysisReadiness,
+    staleTime: 60_000,
+  });
 
   const moveStage = useMutation({
     mutationFn: (candidate: ScreeningCandidate) => {
@@ -145,6 +151,19 @@ export function Dashboard() {
           Add Job
         </Link>
       </div>
+
+      {readinessQuery.data?.resume_provider_configured === false ? (
+        <p
+          role="status"
+          className="mb-6 rounded-2xl border border-[#f0e0b8] bg-[#fdf8ec] px-4 py-3 text-sm text-[#7a5a12]"
+        >
+          <strong>Resume analysis is not configured on the server.</strong> Set{" "}
+          <code>GEMINI_API_KEY</code> in <code>talent_intelligence_backend/.env</code>
+          {" "}and restart the Celery worker. Applications are still saved and
+          GitHub evidence still runs; resume analysis will keep failing and
+          saying so until the key is set.
+        </p>
+      ) : null}
 
       {jobsQuery.error || queueQuery.error ? (
         <p

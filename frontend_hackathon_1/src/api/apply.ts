@@ -124,6 +124,8 @@ export type GitHubAnalysis = {
 export type CandidateAnalysis = {
   status: string;
   error_message: string | null;
+  /** Text extracted from the stored PDF; used for analysis and visible for review. */
+  resume_text: string | null;
   resume: ResumeAnalysis | null;
   github: GitHubAnalysis | null;
 };

@@ -1,10 +1,70 @@
+import os
+
 import click
 from flask import current_app
 
 from models import Job, Organization, OrganizationMembership, User, db
+from services.ai.gemini import generate_json, provider_status
 
 
 def register_commands(app):
+    @app.cli.command("check-analysis")
+    @click.option("--live", is_flag=True, help="Also perform one real AI provider call (costs a token).")
+    @click.option("--github-username", default="", help="Also collect real GitHub evidence for this username.")
+    def check_analysis(live, github_username):
+        """Report what resume and GitHub analysis need, and optionally prove them live.
+
+        Nothing here prints or stores a credential.
+        """
+        status = provider_status()
+        click.echo("Resume analysis:")
+        if status["resume_provider_configured"]:
+            click.echo(f"  GEMINI_API_KEY: configured (model {status['resume_model']})")
+        else:
+            click.echo("  GEMINI_API_KEY: MISSING - resume analysis will fail for every applicant")
+            click.echo("  Add GEMINI_API_KEY=<key> to talent_intelligence_backend/.env and restart the worker.")
+        click.echo(f"  GITHUB_TOKEN: {'configured' if os.environ.get('GITHUB_TOKEN', '').strip() else 'not set (optional; public rate limits apply)'}")
+
+        broker = app.config.get("CELERY", {}).get("broker_url", "")
+        click.echo(f"Task broker: {broker}")
+        if broker.startswith("redis://"):
+            try:
+                import redis
+
+                client = redis.from_url(broker, socket_connect_timeout=3, socket_timeout=3)
+                client.ping()
+                client.close()
+                click.echo("  broker reachable: yes")
+            except Exception as error:  # noqa: BLE001 - operator diagnostics
+                click.echo(f"  broker reachable: no ({type(error).__name__})")
+                click.echo("  Start Redis and a worker: celery -A app.celery_app worker --loglevel=info")
+        click.echo("  A worker must be running or applications stay queued; retry after starting it.")
+
+        if not live and not github_username:
+            return
+        if live:
+            click.echo("Live provider call:")
+            try:
+                value, model = generate_json(
+                    'Return JSON matching the schema with ok set to true.',
+                    {"type": "object", "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]},
+                )
+                click.echo(f"  {model}: replied {value}")
+            except Exception as error:  # noqa: BLE001 - operator diagnostics
+                click.echo(f"  failed: {error}")
+        if github_username:
+            from services.github.collector import collect_github
+
+            click.echo(f"Live GitHub collection for {github_username}:")
+            try:
+                evidence = collect_github(github_username)
+                click.echo(
+                    f"  listed {evidence['summary']['listed_repos']}, analyzed "
+                    f"{len(evidence['repositories'])}, errors {evidence['summary']['errors']}"
+                )
+            except Exception as error:  # noqa: BLE001 - operator diagnostics
+                click.echo(f"  failed: {error}")
+
     @app.cli.command("create-recruiter")
     @click.option("--email", required=True)
     @click.option("--name", required=True)

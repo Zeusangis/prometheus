@@ -11,7 +11,7 @@ import {
   getCandidateProfile,
   retryCandidateAnalysis,
 } from "../../api/apply";
-import { moveCandidateToNextStep } from "../../api/jobs";
+import { getJobById, moveCandidateToNextStep } from "../../api/jobs";
 
 const PROFILE_TABS = [
   "Overview",
@@ -78,6 +78,12 @@ export default function ProfilePage() {
   const analysisQuery = useQuery({
     queryKey: ["candidate-analysis", candidateId],
     queryFn: () => getCandidateAnalysis(candidateId),
+  });
+
+  const jobQuery = useQuery({
+    queryKey: ["job-detail", profileQuery.data?.job_id],
+    queryFn: () => getJobById(String(profileQuery.data?.job_id)),
+    enabled: profileQuery.data?.job_id != null,
   });
 
   const candidate = profileQuery.data;
@@ -320,7 +326,9 @@ export default function ProfilePage() {
                           params={{ jobId: String(candidate.job_id) }}
                           className="inline-block font-semibold text-primary hover:text-primary-light"
                         >
-                          View job {candidate.job_id}
+                          {jobQuery.data?.title
+                            ? `Applied for ${jobQuery.data.title}`
+                            : `View job ${candidate.job_id}`}
                         </Link>
                       ) : (
                         <p className="text-muted-foreground">
@@ -379,7 +387,30 @@ export default function ProfilePage() {
                 ) : null}
 
                 {activeTab === "Resume" ? (
-                  <ResumeSection data={analysis?.resume ?? null} />
+                  <section className="space-y-4">
+                    <ResumeSection data={analysis?.resume ?? null} />
+                    <details className="rounded-2xl border border-border bg-card p-5">
+                      <summary className="cursor-pointer text-lg font-semibold">
+                        Extracted resume text
+                      </summary>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Exactly the text the server read from the uploaded PDF and sent
+                        to the analysis provider. It is shown so you can verify the
+                        evidence yourself; a PDF with no extractable text cannot be
+                        analysed.
+                      </p>
+                      {analysis?.resume_text ? (
+                        <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-secondary/50 p-3 text-xs">
+                          {analysis.resume_text}
+                        </pre>
+                      ) : (
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          No text has been extracted yet. It appears here once the
+                          resume is read, even when the analysis itself fails.
+                        </p>
+                      )}
+                    </details>
+                  </section>
                 ) : null}
 
                 {activeTab === "GitHub Evidence" ? (
