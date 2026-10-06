@@ -98,7 +98,7 @@ def test_transient_error_is_retried_and_succeeds(monkeypatch, no_sleep):
     )
     value, model = generate_json("prompt", {})
     assert value == {"ok": True}
-    assert model == "gemini-3.8-flash"
+    assert model == "gemini-flash-lite-latest"
     assert calls["n"] == 2
     assert no_sleep == [1.0]
 

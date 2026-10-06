@@ -92,6 +92,10 @@ Behaviour worth knowing beyond the table:
   carries its own status and error, and `github` is `null` when no GitHub username was supplied.
 - `/api/candidates/<id>/analysis/retry` answers 202 when the retry was queued, 409 when analysis is
   already queued/running/complete, and 503 when the broker refused the task.
+- `/api/candidates/<id>/stage-events` returns the append-only audit trail for one candidate,
+  newest first: stage changes (with the acting recruiter's email and the stage moved from) and
+  analysis retries (with the status they replaced). It is read-only; there is no endpoint that
+  updates or deletes an event.
 - Job creation requires title, job type and description; `/api/jobs/my-company` is an alias for the
   job list, and the legacy `/api/jobs/<int:id>/apply` path is kept as a public alias.
 - A `partial` or `failed` GitHub component always records a reason naming the repositories that
@@ -124,8 +128,12 @@ table is for:
   per (GitHub analysis, repository name).
 - `meeting_summaries` — interview placeholder created when a candidate reaches
   `interview_scheduled`; replaced by the real interview model in a later phase.
+- `stage_events` — append-only audit trail: one row per stage change or analysis retry, carrying
+  the candidate and job, the acting user's id and email, the stage or analysis status before the
+  change, and when it happened. Rows are never updated or deleted — the mapper refuses both — so
+  the record cannot be rewritten to match a later narrative.
 
-Migration history is additive and never squashed; head is `c840ab218f12`. Fresh upgrades, schema
+Migration history is additive and never squashed; head is `7d2b6f4a91c3`. Fresh upgrades, schema
 drift and legacy-data preservation are covered by
 [`tests/test_migrations_and_config.py`](../talent_intelligence_backend/tests/test_migrations_and_config.py).
 Never use `create_all` to fake a migration.
@@ -284,8 +292,6 @@ updated together instead of letting the document quietly become false.
 - **Interviews**: `/profile/$candidateId/interview-summary` still renders demo interview data, and
   live interviews are disabled (provider settings are placeholders). No secure session model has
   been designed; do not send long-lived provider keys to a browser. <!-- claim: interviews-mocked -->
-- **Audit trail**: stage changes update a column only; there is no immutable record of who moved a
-  candidate, when, or from which stage. <!-- claim: no-audit-trail -->
 - **Concurrency**: no worker leases or dead-worker recovery, no enqueue outbox, no versioned
   analysis history. Only sequential redelivery is verified; concurrent double delivery is not.
   <!-- claim: no-concurrency-hardening -->
@@ -311,16 +317,14 @@ updated together instead of letting the document quietly become false.
 None of these is implemented yet: each closes the matching section 7 claim, so doing one means
 updating this list, that section 7 entry and its check in `tools/known_gaps.py` in the same change.
 
-1. An immutable audit trail for stage changes and analysis retries, surfaced on the profile.
-   <!-- claim: no-audit-trail -->
-2. Replace the mocked interview summary with persisted interview data and design a secure
+1. Replace the mocked interview summary with persisted interview data and design a secure
    interview-session model before enabling live interviews. <!-- claim: interviews-mocked -->
-3. Rate limiting (auth and apply), object storage for resumes, and retention/deletion policy.
+2. Rate limiting (auth and apply), object storage for resumes, and retention/deletion policy.
    <!-- claim: no-rate-limiting -->
    <!-- claim: no-object-storage-or-compose -->
-4. Concurrency hardening: worker leases, dead-worker recovery, an enqueue outbox and versioned
+3. Concurrency hardening: worker leases, dead-worker recovery, an enqueue outbox and versioned
    analysis results. <!-- claim: no-concurrency-hardening -->
-5. Delete or quarantine the prototype residue (`main1/`, `models/github_ats.py`) once its ideas are
+4. Delete or quarantine the prototype residue (`main1/`, `models/github_ats.py`) once its ideas are
    confirmed migrated. <!-- claim: prototype-residue-present -->
 
 ## 9. Working conventions
@@ -356,6 +360,7 @@ Generated from the code by `python -m tools.generate_project_context` (backend w
 | `/api/candidates/<int:candidate_id>/analysis/retry` | POST | session + CSRF | `application.retry_analysis` |
 | `/api/candidates/<int:candidate_id>/next-step` | POST | session + CSRF | `application.move_to_next_step` |
 | `/api/candidates/<int:candidate_id>/stage` | POST | session + CSRF | `application.move_to_next_step` |
+| `/api/candidates/<int:candidate_id>/stage-events` | GET | session | `application.list_stage_events` |
 | `/api/check-portfolio` | POST | session + CSRF | `check_portfolio.check_portfolio_links` |
 | `/api/github/health` | GET | public | `github.github_health` |
 | `/api/health` | GET | public | `health` |
@@ -388,6 +393,7 @@ Generated from the code by `python -m tools.generate_project_context` (backend w
 - `github_analyses`: `id` integer [pk]; `candidate_id` integer [fk → candidates.id, not null]; `status` string(20) [not null, default]; `username` string(255); `total_public_repos` integer; `total_stars` integer; `candidate_attributed_commits` integer; `summary` json; `error_message` text; `created_at` datetime [not null, default]; `updated_at` datetime [not null, default]. Unique: (candidate_id)
 - `meeting_summaries`: `id` integer [pk]; `candidate_id` integer [fk → candidates.id, not null]; `job_id` integer [fk → jobs.id]; `meeting_id` string(255) [not null]; `created_at` datetime [default]. Unique: (meeting_id)
 - `resume_analyses`: `id` integer [pk]; `candidate_id` integer [fk → candidates.id, not null]; `status` string(20) [not null, default]; `ats_score` float; `breakdown` json; `missing_keywords` json; `weak_areas` json; `top_improvements` json; `projects` json; `final_verdict` text; `model_name` string(100); `error_message` text; `created_at` datetime [not null, default]; `updated_at` datetime [not null, default]. Unique: (candidate_id)
+- `stage_events`: `id` integer [pk]; `candidate_id` integer [fk → candidates.id, not null]; `job_id` integer [fk → jobs.id]; `event_type` string(50) [not null]; `from_stage` string(50); `to_stage` string(50); `previous_analysis_status` string(50); `actor_user_id` integer [fk → users.id]; `actor_email` string(255); `created_at` datetime [not null, default]
 - `repository_analyses`: `id` integer [pk]; `github_analysis_id` integer [fk → github_analyses.id, not null]; `repo_name` string(255) [not null]; `repo_url` string(500) [not null]; `primary_language` string(100); `pushed_at` datetime; `score` float; `metrics` json; `strengths` json; `red_flags` json; `recruiter_summary` text; `evidence_metadata` json; `created_at` datetime [not null, default]. Unique: (github_analysis_id, repo_name)
 
 ### A.3 Stage and analysis vocabularies
@@ -411,7 +417,7 @@ Generated from the code by `python -m tools.generate_project_context` (backend w
 | Request size | 5 MiB + 64 KiB multipart overhead | `config/__init__.py` |
 | Screening queue page size | default 10, maximum 100 | `routes/application_routes.py` |
 | Resume text sent to provider | 60,000 characters | `services/resume/analyzer.py` |
-| Provider model (default) | gemini-3.8-flash | `services/ai/gemini.py` |
+| Provider model (default) | gemini-flash-lite-latest | `services/ai/gemini.py` |
 | Provider retry attempts | 3 | `services/ai/gemini.py` |
 | Provider retry backoff | 1.0 s base, doubling, capped at 8.0 s | `services/ai/gemini.py` |
 | Provider retry wait ceiling | 60.0 s; a longer requested wait is not retried | `services/ai/gemini.py` |
@@ -448,6 +454,7 @@ Generated from the code by `python -m tools.generate_project_context` (backend w
 | Module | Test functions |
 | --- | --- |
 | `tests/test_analysis_readiness.py` | 7 |
+| `tests/test_audit_trail.py` | 14 |
 | `tests/test_auth.py` | 3 |
 | `tests/test_authorization.py` | 3 |
 | `tests/test_bootstrap.py` | 2 |
@@ -461,6 +468,6 @@ Generated from the code by `python -m tools.generate_project_context` (backend w
 | `tests/test_resume_analyzer.py` | 6 |
 | `tests/test_resume_pipeline.py` | 8 |
 | `tests/test_screening_queue.py` | 19 |
-| **total** | **120** (parametrized cases expand at run time) |
+| **total** | **134** (parametrized cases expand at run time) |
 
 <!-- END GENERATED INVENTORY -->

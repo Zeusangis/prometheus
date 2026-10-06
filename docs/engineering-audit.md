@@ -331,6 +331,53 @@ The reason is a single assembled sentence, so it is not machine-readable beyond 
 
 Continue deployment hardening: an immutable audit trail for stage changes and retries, rate limiting on auth and public apply, and object storage with a retention policy; and replace the mocked interview-summary screen.
 
+## Phase 12 checkpoint — 2026-10-06
+
+### PHASE
+
+An immutable audit trail for candidate stage changes and analysis retries, surfaced on the applicant profile.
+
+### COMPLETED
+
+- A new append-only `stage_events` table records one row per stage change or analysis retry: the candidate and job, the event type, the stage moved from and to, the analysis status a retry replaced, the acting user's id and email, and when it happened.
+- Events are genuinely immutable. SQLAlchemy mapper guards refuse every UPDATE and DELETE, so a recorded event cannot be rewritten or removed to match a later narrative — an audit trail that a later code path could quietly edit would be worth very little.
+- Recording cannot affect the mutation it describes. The event is constructed and inserted inside a `SAVEPOINT`, so a failure to record is logged, the savepoint is rolled back, and the stage change or retry still commits. Two tests stub the audit store to raise and assert that both a stage change and a retry still succeed.
+- Every stage change is recorded at the single choke point (`move_to_next_step`, which serves all three stage routes) with the acting recruiter and the stage moved from. A refused transition (409) records nothing, so the trail contains only changes that actually happened.
+- Every analysis retry is recorded with the status it replaced, so a retry that was triggered by a `failed` analysis is distinguishable from one triggered by a `partial` result.
+- `GET /api/candidates/<id>/stage-events` returns the trail newest first, scoped through the same organization-ownership helper as the rest of the candidate API. There is no endpoint that creates, updates or deletes an event, and the profile offers no edit or delete control.
+- The migration backfills only what is actually known: one `stage_changed` row for each candidate that has already left `screening`, using its current stage and recorded submission time. No actor, no fabricated timestamp and no invented intermediate stage is written, and candidates still in screening get nothing.
+- The `no-audit-trail` claim was closed, not weakened: its section 7 entry, its section 8 next step and its `tools/known_gaps.py` check were deleted together, and section 8 was renumbered.
+
+### FILES CHANGED
+
+[stage_event.py](../talent_intelligence_backend/models/stage_event.py) (new), [audit.py](../talent_intelligence_backend/services/audit.py) (new), the [stage-events migration](../talent_intelligence_backend/migrations/versions/7d2b6f4a91c3_add_stage_events_audit_trail.py) (new), [models/__init__.py](../talent_intelligence_backend/models/__init__.py), [candidate.py](../talent_intelligence_backend/models/candidate.py), [application_routes.py](../talent_intelligence_backend/routes/application_routes.py), [test_audit_trail.py](../talent_intelligence_backend/tests/test_audit_trail.py) (new); [apply.ts](../frontend_hackathon_1/src/api/apply.ts), [ProfilePage.tsx](../frontend_hackathon_1/src/pages/dashboard/ProfilePage.tsx); [known_gaps.py](../talent_intelligence_backend/tools/known_gaps.py), [project-context.md](project-context.md) and the README.
+
+### DATABASE MIGRATIONS
+
+One new table, `stage_events`, added by `7d2b6f4a91c3` which revises `c840ab218f12`; the head is now `7d2b6f4a91c3`. The revision creates the table and backfills existing candidates as described above, and its `downgrade()` drops the table. History stays append-only: no existing revision was rewritten. The fresh-upgrade, schema-drift and legacy round-trip tests in [`test_migrations_and_config.py`](../talent_intelligence_backend/tests/test_migrations_and_config.py) cover the new head.
+
+### VERIFICATION RUN
+
+226 pytest cases pass (14 new: a stage change recorded with actor and stages, a refused transition recording nothing, newest-first ordering, a rejection recorded like any other change, a retry recording the status it replaced, a refused retry recording nothing, stage changes and retries surviving together, organization scoping, another organization's events never appearing, an unauthenticated 401, an UPDATE refused, a DELETE refused, and an audit failure not blocking either a stage change or a retry) and Ruff reports no findings. `npm run typecheck` and `npm run build` both exit 0. The generated-inventory test passes, confirming Appendix A.1 lists the new route, A.2 the new table and A.6 the new test module.
+
+### MANUAL SMOKE TEST
+
+Real Chromium against a Vite dev server on port 5184 proxying an isolated harness on 5099, signed in as a seeded recruiter, with one applicant inserted directly with a failed analysis so that both event types could be produced without any provider call:
+
+- Before any action, the Activity tab showed the explicit empty state ("No stage changes or analysis retries have been recorded for this candidate yet.").
+- Moving the candidate to Interview Scheduled produced "Moved from Screening to Interview Scheduled" with the acting recruiter's email, without a page reload.
+- Retrying the failed analysis produced "Analysis retry requested (was Failed)", listed above the stage change, confirming newest-first ordering, and the analysis then completed.
+- Direct inspection of the smoke database confirmed exactly two rows: `stage_changed screening -> interview_scheduled` and `analysis_retried (was failed)`, both attributed to `diag.recruiter@example.invalid` with the owning job id.
+- No console errors and no failed requests; `/api/candidates/1/stage-events` answered 200 on each fetch.
+
+### KNOWN LIMITATIONS
+
+Events are recorded for stage changes and analysis retries only; a candidate's initial application in `screening` produces no event, so a brand-new applicant has an empty trail until someone acts on it. There is no retention or pruning policy, and no export of the trail. Because events are append-only, a genuinely mistaken entry can only be superseded by a later event, never corrected — that is deliberate, but it means the actor email is the only identity recorded and no reason or free-text note is captured. The frontend still has no test runner, so the Activity tab is covered by the smoke test above rather than by an automated test.
+
+### NEXT PHASE
+
+Continue deployment hardening: rate limiting on authentication and the public apply endpoint, and object storage with a retention policy; and replace the mocked interview-summary screen with persisted interview data and a secure interview-session model.
+
 ## Subsequent required work
 
-Authentication + organization ownership/CSRF (Phase 4), persisted analyses and providers (Phases 5-7), the truthful applicant evidence profile (Phase 8), the organization-scoped screening queue and dashboard (Phase 9) and its filters, search, pagination and CSV export (Phase 10) are implemented. Deployment remains blocked on remaining privacy/rate-limit/provider/storage work. The interview-summary and interview screens, secure interview sessions, privacy/rate limits/storage/audit, Compose, and the final end-to-end scenario remain required. Do not treat a green initial CI checkpoint as product completion.
+Authentication + organization ownership/CSRF (Phase 4), persisted analyses and providers (Phases 5-7), the truthful applicant evidence profile (Phase 8), the organization-scoped screening queue and dashboard (Phase 9), its filters, search, pagination and CSV export (Phase 10) and the immutable audit trail (Phase 12) are implemented. Deployment remains blocked on remaining privacy/rate-limit/provider/storage work. The interview-summary and interview screens, secure interview sessions, privacy/rate limits/storage, Compose, and the final end-to-end scenario remain required. Do not treat a green initial CI checkpoint as product completion.

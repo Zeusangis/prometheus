@@ -9,8 +9,10 @@ import GitHubSection from "./GitHubSection";
 import {
   getCandidateAnalysis,
   getCandidateProfile,
+  getCandidateStageEvents,
   retryCandidateAnalysis,
 } from "../../api/apply";
+import type { StageEvent } from "../../api/apply";
 import { getJobById, moveCandidateToNextStep } from "../../api/jobs";
 
 const PROFILE_TABS = [
@@ -18,6 +20,7 @@ const PROFILE_TABS = [
   "Resume",
   "GitHub Evidence",
   "Scores & Analysis",
+  "Activity",
 ] as const;
 
 const STAGE_BADGE: Record<string, string> = {
@@ -34,6 +37,17 @@ const RETRYABLE_ANALYSIS = new Set(["failed", "enqueue_failed", "partial"]);
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+function describeStageEvent(event: StageEvent) {
+  if (event.event_type === "analysis_retried") {
+    return event.previous_analysis_status
+      ? `Analysis retry requested (was ${formatLabel(event.previous_analysis_status)})`
+      : "Analysis retry requested";
+  }
+  const from = event.from_stage ? formatLabel(event.from_stage) : "an unknown stage";
+  const to = event.to_stage ? formatLabel(event.to_stage) : "an unknown stage";
+  return `Moved from ${from} to ${to}`;
 }
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -80,6 +94,11 @@ export default function ProfilePage() {
     queryFn: () => getCandidateAnalysis(candidateId),
   });
 
+  const auditQuery = useQuery({
+    queryKey: ["candidate-stage-events", candidateId],
+    queryFn: () => getCandidateStageEvents(candidateId),
+  });
+
   const jobQuery = useQuery({
     queryKey: ["job-detail", profileQuery.data?.job_id],
     queryFn: () => getJobById(String(profileQuery.data?.job_id)),
@@ -99,6 +118,9 @@ export default function ProfilePage() {
       await queryClient.invalidateQueries({
         queryKey: ["candidate", candidateId],
       });
+      await queryClient.invalidateQueries({
+        queryKey: ["candidate-stage-events", candidateId],
+      });
     },
     onError: (error) =>
       setActionError(errorMessage(error, "Analysis retry could not be queued.")),
@@ -116,6 +138,9 @@ export default function ProfilePage() {
       setActionError(null);
       await queryClient.invalidateQueries({
         queryKey: ["candidate", candidateId],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["candidate-stage-events", candidateId],
       });
     },
     onError: (error) => {
@@ -485,6 +510,57 @@ export default function ProfilePage() {
                         unrelated scales and are never combined into a single
                         candidate score or ranking.
                       </p>
+                    </Panel>
+                  </section>
+                ) : null}
+
+                {activeTab === "Activity" ? (
+                  <section className="space-y-4">
+                    <Panel title="Audit trail">
+                      <p className="text-muted-foreground">
+                        Append-only record of every stage change and analysis
+                        retry for this candidate. Entries are written by the
+                        server and cannot be edited or deleted.
+                      </p>
+                      {auditQuery.isLoading ? (
+                        <p className="text-muted-foreground">
+                          Loading audit trail…
+                        </p>
+                      ) : auditQuery.error ? (
+                        <p
+                          role="alert"
+                          className="rounded-lg border border-[#ffe3e0] bg-[#fff6f5] px-3 py-2 text-[#9a3530]"
+                        >
+                          {errorMessage(
+                            auditQuery.error,
+                            "Failed to load the audit trail.",
+                          )}
+                        </p>
+                      ) : auditQuery.data && auditQuery.data.length ? (
+                        <ol className="space-y-3">
+                          {auditQuery.data.map((event) => (
+                            <li
+                              key={event.id}
+                              className="border-l-2 border-border pl-3"
+                            >
+                              <p className="font-semibold">
+                                {describeStageEvent(event)}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatDate(event.created_at)} ·{" "}
+                                {event.actor_email
+                                  ? `by ${event.actor_email}`
+                                  : "actor not recorded"}
+                              </p>
+                            </li>
+                          ))}
+                        </ol>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          No stage changes or analysis retries have been
+                          recorded for this candidate yet.
+                        </p>
+                      )}
                     </Panel>
                   </section>
                 ) : null}

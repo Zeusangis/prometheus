@@ -33,20 +33,19 @@ def upgrade():
     sa.ForeignKeyConstraint(['actor_user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('ix_stage_events_candidate_id', 'stage_events', ['candidate_id'])
 
     # Backfill only what the code currently records: the recruiting stage a candidate
     # holds today. No actor, timestamp or intermediate stage is invented, and nothing is
-    # written for candidates that never left screening.
+    # written for candidates that never left screening. uploaded_at can be null on legacy
+    # rows, so the migration timestamp is used rather than an invalid null.
     connection = op.get_bind()
     connection.execute(sa.text("""
         INSERT INTO stage_events (candidate_id, job_id, event_type, to_stage, created_at)
-        SELECT id, job_id, 'stage_changed', status, uploaded_at
+        SELECT id, job_id, 'stage_changed', status, COALESCE(uploaded_at, CURRENT_TIMESTAMP)
         FROM candidates
         WHERE status IS NOT NULL AND status <> 'screening'
     """))
 
 
 def downgrade():
-    op.drop_index('ix_stage_events_candidate_id', table_name='stage_events')
     op.drop_table('stage_events')

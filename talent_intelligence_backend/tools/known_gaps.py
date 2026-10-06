@@ -76,11 +76,6 @@ def _interviews_are_mocked(app):
     _assert_no_table(r"interview", r"session")
 
 
-def _no_audit_trail(app):
-    _assert_no_table(r"audit", r"stage_event", r"stage_history", r"stage_log")
-    _assert_source_free_of(r"\bAuditLog\b|\bStageEvent\b", "an audit trail")
-
-
 def _no_concurrency_hardening(app):
     _assert_no_table(r"lease", r"outbox", r"version")
     _assert_source_free_of(r"\blease\b|\boutbox\b", "worker leases or an enqueue outbox")
@@ -132,10 +127,6 @@ CLAIM_CHECKS = {
     "interviews-mocked": (
         "interview summaries are still demo data and live interviews are disabled",
         _interviews_are_mocked,
-    ),
-    "no-audit-trail": (
-        "there is no immutable record of stage changes",
-        _no_audit_trail,
     ),
     "no-concurrency-hardening": (
         "there are no worker leases, dead-worker recovery, enqueue outbox or versioned analysis history",

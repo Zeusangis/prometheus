@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 
 from models import Candidate, Job, MeetingSummary, db
 from services.analysis_queue import enqueue_analysis
+from services.audit import events_for_candidate, record_analysis_retry, record_stage_change
 from services.auth import owned_candidate, owned_job
 from services.candidate_stage import (
     ANALYSIS_STATUSES, InvalidTransition, RETRYABLE_ANALYSIS, STAGES, transition_candidate,
@@ -180,9 +181,11 @@ def move_to_next_step(candidate_id, job_id=None):
         return api_error("candidate_not_found", "Candidate not found.", 404)
     if effective_job_id is not None and candidate.job_id != effective_job_id:
         return api_error("candidate_job_mismatch", "Candidate does not belong to this job.", 404)
+    from_stage = candidate.status
     try:
         transition_candidate(candidate, next_status)
     except InvalidTransition as error:
+        # A refused transition records nothing: the trail holds only real changes.
         return api_error("candidate_transition_invalid", str(error), 409)
     # Compatibility until Interview replaces MeetingSummary in the interview phase.
     if next_status == "interview_scheduled":
@@ -190,6 +193,7 @@ def move_to_next_step(candidate_id, job_id=None):
         db.session.add(MeetingSummary(
             candidate_id=candidate.id, job_id=candidate.job_id, meeting_id=candidate.meeting_id
         ))
+    record_stage_change(candidate, from_stage, next_status, g.user)
     db.session.commit()
     return jsonify({
         "success": True,
@@ -279,6 +283,19 @@ def get_candidate(candidate_id):
     return jsonify({"success": True, "candidate": candidate.to_dict()}), 200
 
 
+@application_bp.get("/api/candidates/<int:candidate_id>/stage-events")
+def list_stage_events(candidate_id):
+    """Read-only, organization-scoped audit trail for one candidate, newest first."""
+    candidate = owned_candidate(candidate_id)
+    if not candidate:
+        return api_error("candidate_not_found", "Candidate not found.", 404)
+    return jsonify({
+        "success": True,
+        "candidateId": candidate.id,
+        "events": [event.to_dict() for event in events_for_candidate(candidate.id)],
+    })
+
+
 @application_bp.get("/api/candidates/<int:candidate_id>/analysis")
 def get_analysis(candidate_id):
     candidate = owned_candidate(candidate_id)
@@ -302,9 +319,11 @@ def retry_analysis(candidate_id):
         return api_error("candidate_not_found", "Candidate not found.", 404)
     if candidate.analysis_status not in {"failed", "enqueue_failed", "partial"}:
         return api_error("analysis_retry_invalid", "Analysis is already queued, running, or complete.", 409)
+    previous_status = candidate.analysis_status
     prepare_retry(candidate)
     candidate.analysis_status = "queued"
     candidate.analysis_error = None
+    record_analysis_retry(candidate, previous_status, g.user)
     db.session.commit()
     task_id = enqueue_analysis(candidate)
     return jsonify({"success": task_id is not None, "analysis_status": candidate.analysis_status}), 202 if task_id else 503

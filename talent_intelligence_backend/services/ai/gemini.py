@@ -2,10 +2,9 @@ import json
 import os
 import time
 
-# The Gemini API retires models for new API keys; gemini-2.5-flash now answers
-# 404 NOT_FOUND ("no longer available to new users"). Operators can override with
-# GEMINI_MODEL when a model is retired again.
-DEFAULT_MODEL = "gemini-3.8-flash"
+# Operators can override this with GEMINI_MODEL when a different available model
+# is required for their account or region.
+DEFAULT_MODEL = "gemini-flash-lite-latest"
 # Transient provider failures (5xx, transport, short rate limits) are retried with
 # exponential backoff so one demand spike does not fail a whole analysis.
 RETRY_ATTEMPTS = 3

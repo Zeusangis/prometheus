@@ -37,6 +37,7 @@ Hiring pipeline
 - Organization-scoped screening queue with stage and analysis filters, real ATS evidence, and server-authorized stage moves
 - Dashboard queue controls: stage, analysis and grouping filters, debounced name/email search, per-role scoping, page-size selection with pagination, and CSV export of the rows on screen
 - Recruiter dashboard built from stored applications: pipeline distribution, per-role applicant and interviewing counts, and an analysis-attention view
+- Append-only audit trail of every stage change and analysis retry, with the acting recruiter and the stage or status that was replaced, shown on the applicant profile
 - Database migrations, legacy-data ownership safeguards, automated tests, linting, and CI
 
 ## Technology stack
@@ -129,7 +130,7 @@ Configuration is loaded from the root `.env` file. The most relevant settings ar
 
 - `SECRET_KEY` and `DATABASE_URL` — required for production
 - `GEMINI_API_KEY` — required for server-side resume analysis; without it every applicant records a failed analysis state that names the missing key instead of failing silently. It is read from the root `.env` or `talent_intelligence_backend/.env`
-- `GEMINI_MODEL` — optional; defaults to `gemini-3.8-flash`. The Gemini API retires models for new API keys, so if analysis reports that the model is not recognised, set this to a model the key can use and restart the worker. Free-tier keys allow only a small number of requests per day per model, and GitHub analysis spends one request per sampled repository
+- `GEMINI_MODEL` — optional; defaults to `gemini-flash-lite-latest`. If analysis reports that the model is not recognised, set this to a model the key can use and restart the worker. Free-tier keys allow only a small number of requests per day per model, and GitHub analysis spends one request per sampled repository
 - `GITHUB_TOKEN` — optional read-only authentication for higher GitHub API limits
 - `VITE_API_BASE_URL` — optional frontend API override for local development
 - `FRONTEND_ORIGIN` — optional cross-origin restriction when explicitly required
@@ -184,14 +185,15 @@ TrueHire is designed for bounded, reviewable evidence:
 - The candidate profile renders only saved analysis: it never fabricates scores, skills, contact details or recommendations, and it keeps resume ATS evidence, sampled repository scores and recruiting stages separate.
 - The dashboard and screening queue show only stored applicant records; counts, stages and scores come from the API, and missing analysis is shown as "Not measured" rather than a placeholder number. Screening queue results are always filtered by the recruiter's organization and by jobs that organization owns.
 - Recruiter mutations require authenticated organization membership and CSRF protection. Sessions use HTTP-only, SameSite cookies.
+- Stage changes and analysis retries are recorded in an append-only audit trail that names the acting recruiter and what changed. Recorded events cannot be edited or deleted, they are visible only to the organization that owns the candidate, and failing to record one never blocks the change itself.
 - Local file uploads are intended for development. Production requires controlled object storage, retention/deletion policies, access control, rate limiting, and provider verification.
 
 Do not use the application with real candidate data until the remaining production privacy, storage, concurrency, and provider-validation work is complete.
 
 ## Project status
 
-Implemented: job management, public applications, recruiter authentication with organization scoping and CSRF, persistence and migrations, background processing, provider error classification and readiness reporting, job-aware resume analysis that persists the extracted PDF text, bounded GitHub evidence, the persisted candidate evidence profile, the screening queue with server-side filters, search, pagination and CSV export, the recruiter dashboard, and CI.
+Implemented: job management, public applications, recruiter authentication with organization scoping and CSRF, persistence and migrations, background processing, provider error classification and readiness reporting, job-aware resume analysis that persists the extracted PDF text, bounded GitHub evidence, the persisted candidate evidence profile, the screening queue with server-side filters, search, pagination and CSV export, the append-only stage and retry audit trail, the recruiter dashboard, and CI.
 
-Not yet implemented: the interview-summary screen and a secure live AI interview workflow, an audit trail, rate limiting, production object storage and retention controls, and worker leases or an outbox for delivery guarantees. There is no frontend test runner, and hosted CI cannot be exercised from every environment. Concrete provider limits also apply in practice: a free-tier Gemini key allows only a small number of requests per day per model, and one applicant's GitHub analysis spends one request per sampled repository, so a small key can exhaust its daily budget and leave analysis genuinely partial until the window resets. The `docs/project-context.md` known-gaps and next-steps sections are test-protected too: each claim carries a marker whose registered check fails as soon as the code contradicts it, so implementing one of those features forces the document to be updated in the same change.
+Not yet implemented: the interview-summary screen and a secure live AI interview workflow, rate limiting, production object storage and retention controls, and worker leases or an outbox for delivery guarantees. There is no frontend test runner, and hosted CI cannot be exercised from every environment. Concrete provider limits also apply in practice: a free-tier Gemini key allows only a small number of requests per day per model, and one applicant's GitHub analysis spends one request per sampled repository, so a small key can exhaust its daily budget and leave analysis genuinely partial until the window resets. The `docs/project-context.md` known-gaps and next-steps sections are test-protected too: each claim carries a marker whose registered check fails as soon as the code contradicts it, so implementing one of those features forces the document to be updated in the same change.
 
 For a standing overview of what is built, how it fits together and what is still missing, see [`docs/project-context.md`](docs/project-context.md). For the phase-by-phase audit trail with verification evidence, see [`docs/engineering-audit.md`](docs/engineering-audit.md).

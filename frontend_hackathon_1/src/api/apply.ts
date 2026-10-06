@@ -132,9 +132,30 @@ export type CandidateAnalysis = {
   github: GitHubAnalysis | null;
 };
 
+export type StageEvent = {
+  id: number;
+  event_type: string;
+  /** Stage the candidate moved from; null for an analysis retry. */
+  from_stage: string | null;
+  /** Stage the candidate moved to; null for an analysis retry. */
+  to_stage: string | null;
+  /** Analysis status replaced by a retry; null for a stage change. */
+  previous_analysis_status: string | null;
+  /** Recruiter who acted, recorded on the event itself and never rewritten. */
+  actor_email: string | null;
+  created_at: string;
+};
+
 type CandidateApiResponse = {
   success?: boolean;
   candidate?: CandidateProfile;
+  error?: string;
+};
+
+type StageEventsApiResponse = {
+  success?: boolean;
+  candidateId?: number;
+  events?: StageEvent[];
   error?: string;
 };
 
@@ -219,6 +240,21 @@ export async function getCandidateAnalysis(candidateId: number | string): Promis
     throw new Error("Invalid candidate analysis data");
   }
   return payload as CandidateAnalysis;
+}
+
+export async function getCandidateStageEvents(
+  candidateId: number | string,
+): Promise<StageEvent[]> {
+  const response = await recruiterFetch(
+    `${API_BASE_URL}/api/candidates/${candidateId}/stage-events`,
+  );
+  const payload = (await response
+    .json()
+    .catch(() => ({}))) as StageEventsApiResponse;
+  if (!response.ok) {
+    throw new Error(apiErrorMessage(payload, "Failed to load the audit trail"));
+  }
+  return Array.isArray(payload.events) ? payload.events : [];
 }
 
 export async function retryCandidateAnalysis(candidateId: number | string): Promise<void> {
