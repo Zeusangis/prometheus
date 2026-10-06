@@ -1,5 +1,6 @@
 """Provider failures must reach the recruiter as actionable, safe messages."""
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -53,7 +54,109 @@ def test_unknown_errors_are_not_masked():
     assert classify_provider_error(TypeError("bad call")) is None
 
 
-def test_generate_json_raises_mapped_error(monkeypatch):
+@pytest.fixture
+def no_sleep(monkeypatch):
+    """Replace the backoff sleep with a recorder so retry tests stay instant."""
+    recorded = []
+    monkeypatch.setattr(
+        "services.ai.gemini.time",
+        SimpleNamespace(sleep=lambda seconds: recorded.append(seconds)),
+    )
+    return recorded
+
+
+def client_returning(monkeypatch, outcomes):
+    """Patch genai.Client so generate_content yields outcomes in order, counting calls."""
+    from google import genai
+
+    calls = {"n": 0}
+
+    def generate(**_):
+        outcome = outcomes[min(calls["n"], len(outcomes) - 1)]
+        calls["n"] += 1
+        if isinstance(outcome, Exception):
+            raise outcome
+        return SimpleNamespace(text=outcome)
+
+    class Context:
+        def __enter__(self):
+            return SimpleNamespace(models=SimpleNamespace(generate_content=generate))
+
+        def __exit__(self, *_):
+            return False
+
+    monkeypatch.setattr(genai, "Client", lambda **_: Context())
+    return calls
+
+
+def test_transient_error_is_retried_and_succeeds(monkeypatch, no_sleep):
+    from services.ai.gemini import generate_json
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-only-placeholder")
+    calls = client_returning(
+        monkeypatch, [provider_error(503, "high demand"), json.dumps({"ok": True})]
+    )
+    value, model = generate_json("prompt", {})
+    assert value == {"ok": True}
+    assert model == "gemini-3.8-flash"
+    assert calls["n"] == 2
+    assert no_sleep == [1.0]
+
+
+def test_transient_error_gives_up_after_bounded_attempts(monkeypatch, no_sleep):
+    from services.ai.gemini import generate_json
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-only-placeholder")
+    monkeypatch.setenv("GEMINI_RETRY_ATTEMPTS", "3")
+    calls = client_returning(monkeypatch, [provider_error(503, "high demand")])
+    with pytest.raises(ProviderUnavailable, match="temporarily unavailable"):
+        generate_json("prompt", {})
+    assert calls["n"] == 3
+    assert no_sleep == [1.0, 2.0]
+
+
+def test_long_window_quota_is_not_retried(monkeypatch, no_sleep):
+    """A daily free-tier quota must fail fast, not burn three requests of a tiny budget."""
+    from services.ai.gemini import generate_json
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-only-placeholder")
+    error = provider_error(429, "RESOURCE_EXHAUSTED")
+    error.details = {"error": {"details": [
+        {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "21198s"},
+    ]}}
+    calls = client_returning(monkeypatch, [error])
+    with pytest.raises(ProviderUnavailable, match="quota"):
+        generate_json("prompt", {})
+    assert calls["n"] == 1
+    assert no_sleep == []
+
+
+def test_short_server_retry_delay_is_honoured(monkeypatch, no_sleep):
+    from services.ai.gemini import generate_json
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-only-placeholder")
+    error = provider_error(429, "RESOURCE_EXHAUSTED")
+    error.details = {"error": {"details": [
+        {"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "2s"},
+    ]}}
+    calls = client_returning(monkeypatch, [error, json.dumps({"ok": True})])
+    assert generate_json("prompt", {})[0] == {"ok": True}
+    assert calls["n"] == 2
+    assert no_sleep == [2.0]
+
+
+def test_permanent_error_is_not_retried(monkeypatch, no_sleep):
+    from services.ai.gemini import generate_json
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-only-placeholder")
+    calls = client_returning(monkeypatch, [provider_error(404, "model not found")])
+    with pytest.raises(ProviderUnavailable, match="GEMINI_MODEL"):
+        generate_json("prompt", {})
+    assert calls["n"] == 1
+    assert no_sleep == []
+
+
+def test_generate_json_raises_mapped_error(monkeypatch, no_sleep):
     from google import genai
 
     monkeypatch.setenv("GEMINI_API_KEY", "test-only-placeholder")

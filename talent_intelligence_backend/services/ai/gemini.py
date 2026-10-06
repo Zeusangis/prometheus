@@ -6,11 +6,15 @@ import time
 # 404 NOT_FOUND ("no longer available to new users"). Operators can override with
 # GEMINI_MODEL when a model is retired again.
 DEFAULT_MODEL = "gemini-3.8-flash"
-# Transient provider failures (rate limits, 5xx, transport) are retried with
+# Transient provider failures (5xx, transport, short rate limits) are retried with
 # exponential backoff so one demand spike does not fail a whole analysis.
 RETRY_ATTEMPTS = 3
 RETRY_BASE_SECONDS = 1.0
 RETRY_MAX_SECONDS = 8.0
+# A provider that asks us to wait longer than this is telling us the budget is gone
+# for a long window (for example a daily free-tier quota). Retrying would only spend
+# more of a very small budget, so we stop and let the recruiter see the real reason.
+RETRY_MAX_SERVER_DELAY = 60.0
 
 
 class ProviderUnavailable(RuntimeError):
@@ -55,6 +59,30 @@ def _status_code(error):
         return None
 
 
+def _retry_details(error):
+    """Yield the ``details`` entries the SDK attached to a provider error."""
+    details = getattr(error, "details", None)
+    if not isinstance(details, dict):
+        return
+    entries = details.get("error", {}).get("details")
+    if isinstance(entries, list):
+        yield from entries
+
+
+def server_retry_delay(error):
+    """Seconds the provider asked us to wait, or ``None`` when it did not say."""
+    for entry in _retry_details(error):
+        if not isinstance(entry, dict):
+            continue
+        raw = entry.get("retryDelay") if entry.get("@type", "").endswith("RetryInfo") else None
+        if isinstance(raw, str) and raw.endswith("s"):
+            try:
+                return float(raw[:-1])
+            except ValueError:
+                return None
+    return None
+
+
 def is_transient(error):
     """True only for failures a later identical call may resolve."""
     module = type(error).__module__ or ""
@@ -95,7 +123,11 @@ def classify_provider_error(error):
             "AI provider does not recognise the configured model. Set GEMINI_MODEL to an available model and retry."
         )
     if status == 429 or "RESOURCE_EXHAUSTED" in text:
-        return ProviderUnavailable("AI provider rate limit or quota reached. Retry later.")
+        return ProviderUnavailable(
+            "AI provider quota or rate limit reached. Free-tier keys allow only a small "
+            "number of requests per day and per model; retry once the window resets, or "
+            "raise the quota for this key."
+        )
     if status is not None and status >= 500:
         return ProviderUnavailable("AI provider is temporarily unavailable. Retry later.")
     if status == 400:
@@ -137,7 +169,11 @@ def generate_json(prompt, schema, model=None):
                 raise
             if attempt >= attempts or not is_transient(error):
                 raise unavailable from error
-            time.sleep(min(base * (2 ** (attempt - 1)), RETRY_MAX_SECONDS))
+            requested = server_retry_delay(error)
+            if requested is not None and requested > RETRY_MAX_SERVER_DELAY:
+                # A long-window quota: retrying would only spend more of a tiny budget.
+                raise unavailable from error
+            time.sleep(requested if requested is not None else min(base * (2 ** (attempt - 1)), RETRY_MAX_SECONDS))
     text = getattr(response, "text", None)
     if not text:
         raise InvalidProviderOutput("AI returned no structured data to analyse.")

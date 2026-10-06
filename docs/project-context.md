@@ -410,6 +410,7 @@ Generated from the code by `python -m tools.generate_project_context` (backend w
 
 | Module | Test functions |
 | --- | --- |
+| `tests/test_analysis_readiness.py` | 7 |
 | `tests/test_auth.py` | 3 |
 | `tests/test_authorization.py` | 3 |
 | `tests/test_bootstrap.py` | 2 |
@@ -418,10 +419,11 @@ Generated from the code by `python -m tools.generate_project_context` (backend w
 | `tests/test_jobs_api.py` | 6 |
 | `tests/test_migrations_and_config.py` | 6 |
 | `tests/test_project_context.py` | 2 |
+| `tests/test_provider_errors.py` | 10 |
 | `tests/test_public_applications.py` | 10 |
 | `tests/test_resume_analyzer.py` | 6 |
 | `tests/test_resume_pipeline.py` | 8 |
 | `tests/test_screening_queue.py` | 12 |
-| **total** | **87** (parametrized cases expand at run time) |
+| **total** | **104** (parametrized cases expand at run time) |
 
 <!-- END GENERATED INVENTORY -->

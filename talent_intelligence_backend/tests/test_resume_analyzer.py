@@ -65,7 +65,7 @@ def test_missing_key_never_initializes_sdk(monkeypatch):
     def forbidden(**_):
         raise AssertionError("SDK must not initialize without a key")
     monkeypatch.setattr(genai, "Client", forbidden)
-    with pytest.raises(ProviderUnavailable, match="not configured"):
+    with pytest.raises(ProviderUnavailable, match="no GEMINI_API_KEY is configured"):
         generate_json("prompt", {})
 
 

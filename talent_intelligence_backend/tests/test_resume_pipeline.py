@@ -114,7 +114,7 @@ def test_missing_key_saves_failure_and_preserves_extracted_text(apply, app, clie
         assert candidate.status == "screening"
         assert candidate.ats_score is None
     result = client.get(f"/api/candidates/{candidate_id}/analysis").json
-    assert "not configured" in result["resume"]["error_message"]
+    assert "no GEMINI_API_KEY is configured" in result["resume"]["error_message"]
     assert result["resume"]["ats_score"] is None
 
 
