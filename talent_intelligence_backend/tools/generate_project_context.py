@@ -139,6 +139,9 @@ def vocabulary_section() -> list:
 def limits_section() -> list:
     from config import DevelopmentConfig
     from routes.application_routes import MAX_QUEUE_RESULTS, MAX_RESUME_BYTES
+    from services.ai.gemini import (
+        DEFAULT_MODEL, RETRY_ATTEMPTS, RETRY_BASE_SECONDS, RETRY_MAX_SERVER_DELAY, RETRY_MAX_SECONDS,
+    )
     from services.github import client as github_client
     from services.github import collector
     from services.resume.analyzer import CATEGORY_LIMITS, MAX_RESUME_CHARS
@@ -149,6 +152,10 @@ def limits_section() -> list:
         ("Request size", f"{MAX_RESUME_BYTES // mib} MiB + {(DevelopmentConfig.MAX_CONTENT_LENGTH - MAX_RESUME_BYTES) // 1024} KiB multipart overhead", "config/__init__.py"),
         ("Screening queue rows", str(MAX_QUEUE_RESULTS), "routes/application_routes.py"),
         ("Resume text sent to provider", f"{MAX_RESUME_CHARS:,} characters", "services/resume/analyzer.py"),
+        ("Provider model (default)", DEFAULT_MODEL, "services/ai/gemini.py"),
+        ("Provider retry attempts", str(RETRY_ATTEMPTS), "services/ai/gemini.py"),
+        ("Provider retry backoff", f"{RETRY_BASE_SECONDS} s base, doubling, capped at {RETRY_MAX_SECONDS} s", "services/ai/gemini.py"),
+        ("Provider retry wait ceiling", f"{RETRY_MAX_SERVER_DELAY} s; a longer requested wait is not retried", "services/ai/gemini.py"),
         ("GitHub requests", str(github_client.MAX_REQUESTS), "services/github/client.py"),
         ("GitHub response size", f"{github_client.MAX_RESPONSE_BYTES // mib} MiB", "services/github/client.py"),
         ("GitHub total budget", f"{github_client.BUDGET_SECONDS} s", "services/github/client.py"),

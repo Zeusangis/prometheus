@@ -246,6 +246,14 @@ migrated SQLite database from a throwaway harness outside the repository, replac
 dev server (proxying `/api` to that backend) with a real browser tab and assert on rendered text.
 Because that harness lives in a temp directory, recreate it when needed.
 
+Live provider verification is manual and recorded, not automated. With a real `GEMINI_API_KEY` on
+2026-10-06 an application produced a completed resume analysis (ATS 53/100, a breakdown that summed
+to exactly 53, and the extracted PDF text stored and rendered), and real public GitHub evidence was
+collected for `octocat` (8 listed, 3 sampled). Two provider facts came out of that run and are worth
+remembering: the Gemini API retires models for new API keys, so `GEMINI_MODEL` may need changing,
+and free-tier keys allow only a small number of requests per day per model, so a live run can
+exhaust a model's daily budget and leave GitHub analysis genuinely `partial`.
+
 Environment quirks on the original development machine: use `--noproxy '*'` (or an empty
 `ProxyHandler`) for localhost HTTP; Vite binds `[::1]` so use `localhost`, not `127.0.0.1`, for dev
 server URLs; the local Redis on 6379 may belong to another process — never flush it.
@@ -255,40 +263,63 @@ server URLs; the local Redis on 6379 may belong to another process — never flu
 Root `.env` (see [`.env.example`](../.env.example)): `FLASK_ENV`, `SECRET_KEY`, `DATABASE_URL`,
 `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`, `FRONTEND_ORIGIN`, `UPLOAD_FOLDER`,
 `GEMINI_API_KEY`, `GEMINI_MODEL`, `GITHUB_TOKEN`, `NAVTALK_*` placeholders, `VITE_API_BASE_URL`.
-Never expose provider credentials through `VITE_*` variables.
+Never expose provider credentials through `VITE_*` variables. `GEMINI_MODEL` defaults to the value
+in Appendix A.4 and is overridable because the provider retires models; the retry behaviour is also
+listed there and is tunable with `GEMINI_RETRY_ATTEMPTS` and `GEMINI_RETRY_BASE_SECONDS`.
 
 ## 7. Deliberately not built yet
 
+Every claim below carries a `<!-- claim: <id> -->` marker. `tests/test_project_context.py` looks up
+the check registered for that id in `tools/known_gaps.py` and fails when the code contradicts the
+claim, so implementing one of these features forces this section, section 8 and the registry to be
+updated together instead of letting the document quietly become false.
+
 - **Interviews**: `/profile/$candidateId/interview-summary` still renders demo interview data, and
   live interviews are disabled (provider settings are placeholders). No secure session model has
-  been designed; do not send long-lived provider keys to a browser.
+  been designed; do not send long-lived provider keys to a browser. <!-- claim: interviews-mocked -->
 - **Dashboard controls**: the queue API supports stage/analysis filters, search and job scoping, but
   the UI has no filter, search, pagination or CSV export yet, and it renders the 10 most recent of
-  the queue.
+  the queue. <!-- claim: dashboard-queue-controls-missing -->
 - **Audit trail**: stage changes update a column only; there is no immutable record of who moved a
-  candidate, when, or from which stage.
+  candidate, when, or from which stage. <!-- claim: no-audit-trail -->
 - **Concurrency**: no worker leases or dead-worker recovery, no enqueue outbox, no versioned
   analysis history. Only sequential redelivery is verified; concurrent double delivery is not.
-- **Abuse/deployment hardening**: no auth or apply rate limiting, no object storage, retention or
-  deletion policy, no malware scanning, no Compose/deployment configuration. SQLite is the verified
-  database; PostgreSQL is untested (no Docker daemon available).
-- **Verification gaps**: live Gemini and GitHub calls, PostgreSQL, a real Celery broker/Redis
-  worker and hosted CI have never been exercised (the `gh` CLI is not installed).
+  <!-- claim: no-concurrency-hardening -->
+- **Abuse hardening**: authentication and the public apply endpoint are not rate limited.
+  <!-- claim: no-rate-limiting -->
+- **Deployment hardening**: no object storage, retention or deletion policy, no malware scanning,
+  and no Compose or container deployment configuration. SQLite is the verified database; PostgreSQL
+  is untested (no Docker daemon was available). <!-- claim: no-object-storage-or-compose -->
+- **Verification gaps**: PostgreSQL, a real Celery broker with a live Redis worker, and hosted CI
+  have never been exercised (the `gh` CLI is not installed). Continuous integration never reaches a
+  live provider — the suite blanks `GEMINI_API_KEY` and `GITHUB_TOKEN` and stubs the GitHub
+  transport. Live Gemini and live GitHub calls *have* been exercised by hand against a real key (see
+  section 5), but that is a recorded manual run rather than a repeatable check.
+  <!-- claim: ci-never-calls-live-providers -->
 - **Prototype residue**: `main1/` (unsafe, never imported) and the unused
   `models/github_ats.py` (`Summary` back-populates reference a table that no longer exists).
+  <!-- claim: prototype-residue-present -->
 - **Multi-org UI**: users belong to one organization in the UI; there is no organization switcher.
+  <!-- claim: single-organization-ui -->
 
 ## 8. Suggested next steps
 
+None of these is implemented yet: each closes the matching section 7 claim, so doing one means
+updating this list, that section 7 entry and its check in `tools/known_gaps.py` in the same change.
+
 1. Screening filters, search and pagination in the dashboard, using the existing query parameters.
+   <!-- claim: dashboard-queue-controls-missing -->
 2. An immutable audit trail for stage changes and analysis retries, surfaced on the profile.
+   <!-- claim: no-audit-trail -->
 3. Replace the mocked interview summary with persisted interview data and design a secure
-   interview-session model before enabling live interviews.
+   interview-session model before enabling live interviews. <!-- claim: interviews-mocked -->
 4. Rate limiting (auth and apply), object storage for resumes, and retention/deletion policy.
+   <!-- claim: no-rate-limiting -->
+   <!-- claim: no-object-storage-or-compose -->
 5. Concurrency hardening: worker leases, dead-worker recovery, an enqueue outbox and versioned
-   analysis results.
+   analysis results. <!-- claim: no-concurrency-hardening -->
 6. Delete or quarantine the prototype residue (`main1/`, `models/github_ats.py`) once its ideas are
-   confirmed migrated.
+   confirmed migrated. <!-- claim: prototype-residue-present -->
 
 ## 9. Working conventions
 
@@ -378,6 +409,10 @@ Generated from the code by `python -m tools.generate_project_context` (backend w
 | Request size | 5 MiB + 64 KiB multipart overhead | `config/__init__.py` |
 | Screening queue rows | 200 | `routes/application_routes.py` |
 | Resume text sent to provider | 60,000 characters | `services/resume/analyzer.py` |
+| Provider model (default) | gemini-3.8-flash | `services/ai/gemini.py` |
+| Provider retry attempts | 3 | `services/ai/gemini.py` |
+| Provider retry backoff | 1.0 s base, doubling, capped at 8.0 s | `services/ai/gemini.py` |
+| Provider retry wait ceiling | 60.0 s; a longer requested wait is not retried | `services/ai/gemini.py` |
 | GitHub requests | 40 | `services/github/client.py` |
 | GitHub response size | 2 MiB | `services/github/client.py` |
 | GitHub total budget | 90 s | `services/github/client.py` |
@@ -418,12 +453,12 @@ Generated from the code by `python -m tools.generate_project_context` (backend w
 | `tests/test_github_analysis.py` | 25 |
 | `tests/test_jobs_api.py` | 6 |
 | `tests/test_migrations_and_config.py` | 6 |
-| `tests/test_project_context.py` | 2 |
+| `tests/test_project_context.py` | 4 |
 | `tests/test_provider_errors.py` | 12 |
 | `tests/test_public_applications.py` | 10 |
 | `tests/test_resume_analyzer.py` | 6 |
 | `tests/test_resume_pipeline.py` | 8 |
 | `tests/test_screening_queue.py` | 12 |
-| **total** | **106** (parametrized cases expand at run time) |
+| **total** | **108** (parametrized cases expand at run time) |
 
 <!-- END GENERATED INVENTORY -->
